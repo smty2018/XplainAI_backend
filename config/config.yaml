@@ -7,6 +7,7 @@ output_dir: "./outputs"
 # Model settings
 vl2_model: "deepseek-ai/deepseek-vl2-tiny"
 vl2_repo_path: "./DeepSeek-VL2"
+reasoning_model: "deepseek-ai/deepseek-math-7b-instruct"
 use_gpu: false
 max_pages: 3
 
@@ -17,3 +18,11 @@ max_new_tokens_text: 320
 max_new_tokens_image: 260
 max_new_tokens_pdf: 320
 temperature: 0.1
+
+# Reasoning v1 settings
+reasoning_input_max_length: 4096
+reasoning_max_new_tokens: 2048
+reasoning_temperature: 0.2
+reasoning_top_p: 0.95
+enable_cache: true
+cache_dir: "./cache"

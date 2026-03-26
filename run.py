@@ -10,6 +10,7 @@ from time import perf_counter
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.parser import LocalParser
+from src.reasoner import SolutionOrchestrator
 
 
 def main():
@@ -41,22 +42,45 @@ def main():
         action="store_true",
         help="Show local storage stats after the run",
     )
+    parser.add_argument(
+        "--reason",
+        action="store_true",
+        help="Run the reasoning v1 model after parsing",
+    )
+    parser.add_argument(
+        "--reason-trace",
+        action="store_true",
+        help="Include a public reasoning trace summary in the solution output",
+    )
 
     args = parser.parse_args()
 
     print("=" * 50)
-    print("XplainAI Parser")
+    print("XplainAI Parser" + (" + Reasoner" if args.reason else ""))
     print("=" * 50)
-    print("Initializing parser...")
+    print("Initializing pipeline..." if args.reason else "Initializing parser...")
     print()
 
     run_start = perf_counter()
-    parser_obj = LocalParser(args.config)
+    parser_obj = None
+    orchestrator = None
+    if args.reason:
+        orchestrator = SolutionOrchestrator(args.config)
+        parser_obj = orchestrator.parser
+    else:
+        parser_obj = LocalParser(args.config)
 
     print(f"\nProcessing: {args.input}")
     print("-" * 50)
 
-    if args.type == "auto":
+    if args.reason:
+        result = orchestrator.process(
+            args.input,
+            input_type=args.type,
+            prompt_text=args.prompt,
+            include_reasoning_trace=args.reason_trace,
+        )
+    elif args.type == "auto":
         input_path = Path(args.input)
         if args.prompt and input_path.exists():
             suffix = input_path.suffix.lower()
@@ -79,21 +103,37 @@ def main():
 
         result = parser_obj.parse_image(Image.open(args.input), prompt_text=args.prompt)
 
-    print("\n" + "=" * 50)
-    print("PARSING RESULT:")
-    print("=" * 50)
-    print(json.dumps(result, indent=2, ensure_ascii=False))
-
-    timing = result.get("_timing")
-    if timing:
+    if args.reason:
         print("\n" + "=" * 50)
-        print("TIMING:")
+        print("PARSED INPUT:")
         print("=" * 50)
-        for key, value in timing.items():
-            if isinstance(value, float):
-                print(f"{key}: {value:.3f} sec")
-            else:
-                print(f"{key}: {value}")
+        print(json.dumps(result.get("parsed_input", {}), indent=2, ensure_ascii=False))
+
+        print("\n" + "=" * 50)
+        print("SOLUTION OUTPUT:")
+        print("=" * 50)
+        print(json.dumps(result.get("solution", {}), indent=2, ensure_ascii=False))
+
+        print("\n" + "=" * 50)
+        print("PIPELINE METADATA:")
+        print("=" * 50)
+        print(json.dumps(result.get("pipeline_metadata", {}), indent=2, ensure_ascii=False))
+    else:
+        print("\n" + "=" * 50)
+        print("PARSING RESULT:")
+        print("=" * 50)
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+
+        timing = result.get("_timing")
+        if timing:
+            print("\n" + "=" * 50)
+            print("TIMING:")
+            print("=" * 50)
+            for key, value in timing.items():
+                if isinstance(value, float):
+                    print(f"{key}: {value:.3f} sec")
+                else:
+                    print(f"{key}: {value}")
 
     print(f"\nCLI total runtime: {perf_counter() - run_start:.3f} sec")
 
