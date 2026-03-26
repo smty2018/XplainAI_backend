@@ -1,0 +1,20 @@
+.env
+venv/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local caches and generated outputs
+cache/**
+!cache/.gitkeep
+models/cache/**
+!models/cache/.gitkeep
+outputs/**
+!outputs/.gitkeep
+
+# Editable install metadata
+DeepSeek-VL2/deepseek_vl2.egg-info/
+
+# Preserve vendored source while keeping the original nested git metadata local-only
+DeepSeek-VL2/.git.backup/

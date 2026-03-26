@@ -1,0 +1,110 @@
+#!/usr/bin/env python
+"""Main script to run the local parser."""
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from time import perf_counter
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+from src.parser import LocalParser
+
+
+def main():
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
+
+    parser = argparse.ArgumentParser(description="XplainAI Local Parser")
+    parser.add_argument("input", help="Input text, image path, or PDF path")
+    parser.add_argument(
+        "--type",
+        choices=["text", "image", "pdf", "auto"],
+        default="auto",
+        help="Input type",
+    )
+    parser.add_argument(
+        "--config",
+        default="config/config.yaml",
+        help="Config file path",
+    )
+    parser.add_argument(
+        "--prompt",
+        default="",
+        help="Optional extra instruction to combine with image or PDF input",
+    )
+    parser.add_argument(
+        "--save",
+        action="store_true",
+        help="Show local storage stats after the run",
+    )
+
+    args = parser.parse_args()
+
+    print("=" * 50)
+    print("XplainAI Parser")
+    print("=" * 50)
+    print("Initializing parser...")
+    print()
+
+    run_start = perf_counter()
+    parser_obj = LocalParser(args.config)
+
+    print(f"\nProcessing: {args.input}")
+    print("-" * 50)
+
+    if args.type == "auto":
+        input_path = Path(args.input)
+        if args.prompt and input_path.exists():
+            suffix = input_path.suffix.lower()
+            if suffix == ".pdf":
+                result = parser_obj.parse_pdf(args.input, prompt_text=args.prompt)
+            elif suffix in {".png", ".jpg", ".jpeg"}:
+                from PIL import Image
+
+                result = parser_obj.parse_image(Image.open(args.input), prompt_text=args.prompt)
+            else:
+                result = parser_obj.parse(args.input)
+        else:
+            result = parser_obj.parse(args.input)
+    elif args.type == "text":
+        result = parser_obj.parse_text(args.input)
+    elif args.type == "pdf":
+        result = parser_obj.parse_pdf(args.input, prompt_text=args.prompt)
+    else:
+        from PIL import Image
+
+        result = parser_obj.parse_image(Image.open(args.input), prompt_text=args.prompt)
+
+    print("\n" + "=" * 50)
+    print("PARSING RESULT:")
+    print("=" * 50)
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+
+    timing = result.get("_timing")
+    if timing:
+        print("\n" + "=" * 50)
+        print("TIMING:")
+        print("=" * 50)
+        for key, value in timing.items():
+            if isinstance(value, float):
+                print(f"{key}: {value:.3f} sec")
+            else:
+                print(f"{key}: {value}")
+
+    print(f"\nCLI total runtime: {perf_counter() - run_start:.3f} sec")
+
+    if args.save:
+        print("\n" + "=" * 50)
+        print("STORAGE STATS:")
+        print("=" * 50)
+        stats = parser_obj.get_stats()
+        for key, value in stats.items():
+            print(f"{key}: {value:.2f} MB")
+
+
+if __name__ == "__main__":
+    main()

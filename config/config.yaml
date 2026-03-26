@@ -1,0 +1,19 @@
+# Project configuration
+# Local paths (all relative to project root)
+model_cache: "./models/cache"
+data_dir: "./data"
+output_dir: "./outputs"
+
+# Model settings
+vl2_model: "deepseek-ai/deepseek-vl2-tiny"
+vl2_repo_path: "./DeepSeek-VL2"
+use_gpu: false
+max_pages: 3
+
+# Processing settings
+batch_size: 1
+max_new_tokens: 512
+max_new_tokens_text: 320
+max_new_tokens_image: 260
+max_new_tokens_pdf: 320
+temperature: 0.1
