@@ -7,6 +7,14 @@ output_dir: "./outputs"
 # Model settings
 vl2_model: "deepseek-ai/deepseek-vl2-tiny"
 vl2_repo_path: "./DeepSeek-VL2"
+replicate_model: "deepseek-ai/deepseek-vl2"
+replicate_model_version: "e5caf557dd9e5dcee46442e1315291ef1867f027991ede8ff95e304d4f734200"
+replicate_api_base_url: "https://api.replicate.com/v1"
+replicate_api_timeout_seconds: 180
+replicate_api_wait_seconds: 60
+replicate_poll_interval_seconds: 2
+replicate_max_inline_image_bytes: 900000
+replicate_max_image_side: 1400
 reasoning_model: "deepseek-ai/deepseek-math-7b-instruct"
 use_gpu: false
 max_pages: 3
