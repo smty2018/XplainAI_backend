@@ -277,18 +277,34 @@ class ReplicateDeepSeekVL2Parser(LocalParser):
         if extra_headers:
             headers.update(extra_headers)
 
-        req = urlrequest.Request(url, data=body, headers=headers, method=method)
-        try:
-            with urlrequest.urlopen(req, timeout=self.api_timeout_seconds) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except urlerror.HTTPError as exc:
-            error_body = exc.read().decode("utf-8", errors="replace")
-            message = self._extract_error_message(error_body)
-            raise ReplicateAPIError(
-                f"Replicate API request failed ({exc.code}): {message}"
-            ) from exc
-        except urlerror.URLError as exc:
-            raise ReplicateAPIError(f"Replicate API network error: {exc}") from exc
+        last_error: Optional[Exception] = None
+        for attempt in range(4):
+            req = urlrequest.Request(url, data=body, headers=headers, method=method)
+            try:
+                with urlrequest.urlopen(req, timeout=self.api_timeout_seconds) as response:
+                    return json.loads(response.read().decode("utf-8"))
+            except urlerror.HTTPError as exc:
+                error_body = exc.read().decode("utf-8", errors="replace")
+                message = self._extract_error_message(error_body)
+                if exc.code == 429 and attempt < 3:
+                    reset_match = re.search(r"resets in ~(\d+)s", message, flags=re.IGNORECASE)
+                    delay_seconds = int(reset_match.group(1)) + 1 if reset_match else 3
+                    time.sleep(max(delay_seconds, 1))
+                    last_error = exc
+                    continue
+                raise ReplicateAPIError(
+                    f"Replicate API request failed ({exc.code}): {message}"
+                ) from exc
+            except urlerror.URLError as exc:
+                last_error = exc
+                if attempt < 3:
+                    time.sleep(2)
+                    continue
+                raise ReplicateAPIError(f"Replicate API network error: {exc}") from exc
+
+        if last_error:
+            raise ReplicateAPIError(f"Replicate API request failed: {last_error}") from last_error
+        raise ReplicateAPIError("Replicate API request failed for an unknown reason.")
 
     def _wait_for_prediction(self, prediction: Dict[str, Any]) -> Dict[str, Any]:
         status = prediction.get("status")
@@ -491,6 +507,190 @@ class ReplicateDeepSeekVL2Parser(LocalParser):
 
         return "\n".join(part for part in parts if part).strip()
 
+    def _visual_support_text_from_result(self, result: Dict[str, Any]) -> str:
+        parts: List[str] = []
+        base_text = super()._visual_text_from_result(result)
+        if base_text:
+            parts.append(base_text)
+
+        topic = self._coerce_string(result.get("topic"))
+        if topic:
+            parts.append(topic)
+
+        for concept in self._coerce_string_list(result.get("key_concepts")):
+            parts.append(concept)
+
+        return "\n".join(part for part in parts if part).strip()
+
+    def _normalize_visible_math_text(self, value: str) -> str:
+        text = self._coerce_string(value)
+        if not text:
+            return ""
+
+        replacements = [
+            ("\\\\", "\\"),
+            ("\\sqrt", "sqrt"),
+            ("√", "sqrt"),
+            ("âˆš", "sqrt"),
+            ("\\sum", "sum"),
+            ("Σ", "sum"),
+            ("∑", "sum"),
+            ("\\int", "int"),
+            ("∫", "int"),
+            ("\\frac", "frac"),
+            ("\\pi", "pi"),
+            ("π", "pi"),
+            ("Ï€", "pi"),
+            ("\\omega", "omega"),
+            ("\\alpha", "alpha"),
+            ("\\beta", "beta"),
+            ("\\gamma", "gamma"),
+            ("\\theta", "theta"),
+            ("\\lambda", "lambda"),
+            ("\\sin", "sin"),
+            ("\\cos", "cos"),
+            ("\\tan", "tan"),
+            ("\\log", "log"),
+            ("\\ln", "ln"),
+        ]
+        for source, target in replacements:
+            text = text.replace(source, target)
+
+        text = text.casefold()
+        text = text.replace("{", "").replace("}", "")
+        text = text.replace("[", "").replace("]", "")
+        text = text.replace("(", "").replace(")", "")
+        text = text.replace("_", "")
+        text = text.replace("^", "")
+        text = text.replace("\\", "")
+        text = re.sub(r"[^a-z0-9]+", "", text)
+        return text
+
+    def _has_formula_evidence(self, text: str) -> bool:
+        visible_text = self._coerce_string(text)
+        if not visible_text:
+            return False
+
+        formula_patterns = [
+            r"[=∑Σ∫√]",
+            r"\\(?:sqrt|sum|int|frac|pi|alpha|beta|gamma|omega)\b",
+            r"\b(?:sqrt|sum|int|frac)\b",
+            r"\b(?:sin|cos|tan|log|ln)\s*\(",
+            r"\b[A-Za-z][A-Za-z0-9_]*\s*=\s*[^=\n]+",
+            r"\b[xyzabcdnlmkvt]\s*[_^]?\s*\d",
+        ]
+        return any(
+            re.search(pattern, visible_text, flags=re.IGNORECASE)
+            for pattern in formula_patterns
+        )
+
+    def _has_formula_topic_cues(self, text: str) -> bool:
+        visible_text = self._coerce_string(text)
+        if not visible_text:
+            return False
+
+        topic_patterns = [
+            r"\bformula(?:s)?\b",
+            r"\bequation(?:s)?\b",
+            r"\bfourier series\b",
+            r"\bcoefficient(?:s)?\b",
+            r"\bkirchhoff\b",
+            r"\bdistance between two points\b",
+            r"\bdirection cosines?\b",
+            r"\btransform\b",
+            r"\bidentity\b",
+            r"\blaw\b",
+        ]
+        return any(
+            re.search(pattern, visible_text, flags=re.IGNORECASE)
+            for pattern in topic_patterns
+        )
+
+    def _filter_supported_image_equations(
+        self,
+        equations: List[Dict[str, Any]],
+        support_text: str,
+        allow_formula_fallback: bool = False,
+    ) -> List[Dict[str, Any]]:
+        if not equations:
+            return []
+
+        normalized_support = self._normalize_visible_math_text(support_text)
+        if not normalized_support:
+            return []
+
+        filtered: List[Dict[str, Any]] = []
+        seen: set[str] = set()
+
+        for item in equations:
+            if not isinstance(item, dict):
+                continue
+
+            forms: List[str] = []
+            for key in ["raw", "latex"]:
+                form = self._normalize_visible_math_text(item.get(key))
+                if form and len(form) >= 4 and form not in forms:
+                    forms.append(form)
+
+            if not forms:
+                continue
+
+            raw_text = self._coerce_string(item.get("raw") or item.get("latex"))
+            has_direct_support = any(form in normalized_support for form in forms)
+            has_fragment_support = False
+            if not has_direct_support and "=" not in raw_text:
+                fragment_tokens = [
+                    self._normalize_visible_math_text(token)
+                    for token in re.findall(r"[A-Za-z]+\d*|\d+", raw_text)
+                ]
+                fragment_tokens = [
+                    token for token in fragment_tokens if token and len(token) >= 2
+                ]
+                has_fragment_support = bool(fragment_tokens) and all(
+                    token in normalized_support for token in fragment_tokens
+                )
+
+            has_formula_fallback = False
+            if not has_direct_support and not has_fragment_support and allow_formula_fallback:
+                advanced_markers = [
+                    r"\\(?:sum|int|sqrt|frac|omega|alpha|beta|gamma)",
+                    r"[Σ∑∫√]",
+                    r"\b(?:a_n|b_n|c_n|x\(t\)|omega_?0|w_?0)\b",
+                    r"\b(?:sin|cos|tan)\s*\(",
+                    r"[A-Za-z]_[A-Za-z0-9]+",
+                    r"\^[A-Za-z0-9]",
+                ]
+                marker_hits = sum(
+                    1
+                    for pattern in advanced_markers
+                    if re.search(pattern, raw_text, flags=re.IGNORECASE)
+                )
+                operator_count = len(re.findall(r"[+\-*/=^]", raw_text))
+                has_formula_fallback = (
+                    "=" in raw_text
+                    and (
+                        marker_hits >= 1
+                        or (
+                            operator_count >= 3
+                            and any(token in raw_text for token in ["(", ")", "_", "^"])
+                        )
+                    )
+                )
+
+            if not has_direct_support and not has_fragment_support and not has_formula_fallback:
+                continue
+
+            canonical = self._canonicalize_equation_text(
+                self._coerce_string(item.get("latex") or item.get("raw"))
+            )
+            if canonical and canonical in seen:
+                continue
+            if canonical:
+                seen.add(canonical)
+            filtered.append(item)
+
+        return filtered
+
     def _split_image_for_detail_pass(self, image: Image.Image) -> List[Image.Image]:
         rgb = image.convert("RGB")
         width, height = rgb.size
@@ -518,10 +718,10 @@ class ReplicateDeepSeekVL2Parser(LocalParser):
         detail_prompt = (
             "Analyze this <image> crop and respond with valid JSON only.\n"
             "Return ONLY these keys: equations, key_concepts, text.\n"
-            'equations must include every clearly visible formula, coefficient definition, and labeled math expression in this crop as [{"raw": "...", "latex": "..."}].\n'
+            'equations must include only clearly visible formula text, coefficient definitions, and labeled math expressions from this crop as [{"raw": "...", "latex": "..."}].\n'
             "key_concepts should be short noun phrases, not full sentences.\n"
             "text should be a concise OCR-style transcription of visible labels and formulas.\n"
-            "Prefer exact visible content over explanation."
+            "Do not infer an equation from the shape of a graph or curve. Prefer exact visible content over explanation."
         )
 
         start = perf_counter()
@@ -541,7 +741,7 @@ class ReplicateDeepSeekVL2Parser(LocalParser):
                 merged_key_concepts,
                 self._coerce_string_list(detail_result.get("key_concepts")),
             )
-            detail_text = self._visual_text_from_result(detail_result)
+            detail_text = self._visual_support_text_from_result(detail_result)
             if detail_text:
                 text_parts.append(detail_text)
 
@@ -851,7 +1051,7 @@ class ReplicateDeepSeekVL2Parser(LocalParser):
             'entities must include only: symbols, concepts, variables, constants.\n'
             'If equations are visible, return equations as [{"raw": "...", "latex": "..."}]. Include every clearly visible formula, not just the main one.\n'
             "text should be a concise OCR-style transcription of visible headings, labels, and formulas.\n"
-            "Prefer exact visible text over speculation. Keep text concise and summarize the main diagram/document content."
+            "Do not infer an equation from the shape of a graph or plot. Prefer exact visible text over speculation. Keep text concise and summarize the main diagram/document content."
         )
         if user_prompt:
             prompt = f"{prompt}\nUser instruction: {user_prompt}"
@@ -865,10 +1065,11 @@ class ReplicateDeepSeekVL2Parser(LocalParser):
         supplemental_parts = []
         if user_prompt:
             supplemental_parts.append(user_prompt)
-        visual_text = self._visual_text_from_result(model_result)
+        visual_text = self._visual_support_text_from_result(model_result)
         if visual_text:
             supplemental_parts.append(visual_text)
         supplemental_text = "\n".join(supplemental_parts)
+        formula_topic_cues = self._has_formula_topic_cues(supplemental_text)
         result = self._normalize_visual_result(
             model_result,
             input_type="image",
@@ -882,14 +1083,22 @@ class ReplicateDeepSeekVL2Parser(LocalParser):
             default_page=1,
         )
         if model_equations:
-            result["equations"] = model_equations
-            result["quality_flags"]["has_equations"] = True
+            result["equations"] = self._filter_supported_image_equations(
+                model_equations,
+                support_text=supplemental_text,
+                allow_formula_fallback=formula_topic_cues,
+            )
+            result["quality_flags"]["has_equations"] = bool(result["equations"])
         result = self._refine_visual_result(result, supplemental_text, input_type="image")
 
         detail_timing: Dict[str, Any] = {}
+        formula_evidence = self._has_formula_evidence(supplemental_text)
         needs_detail_pass = (
-            len(result.get("equations", [])) < 3
-            or not result.get("entities", {}).get("concepts")
+            not result.get("entities", {}).get("concepts")
+            or (
+                (formula_evidence or formula_topic_cues)
+                and len(result.get("equations", [])) < 3
+            )
         )
         if needs_detail_pass:
             detail_pass = self._extract_image_detail_pass(
@@ -911,6 +1120,15 @@ class ReplicateDeepSeekVL2Parser(LocalParser):
                 supplemental_text = "\n".join(
                     part for part in [supplemental_text, detail_pass["text"]] if part
                 )
+            if result.get("equations"):
+                updated_formula_topic_cues = self._has_formula_topic_cues(supplemental_text)
+                result["equations"] = self._filter_supported_image_equations(
+                    result.get("equations", []),
+                    support_text=supplemental_text,
+                    allow_formula_fallback=updated_formula_topic_cues,
+                )
+                result["quality_flags"]["has_equations"] = bool(result["equations"])
+            if detail_pass["text"] or detail_pass["equations"] or detail_pass["key_concepts"]:
                 result = self._refine_visual_result(result, supplemental_text, input_type="image")
             detail_timing = {
                 "detail_pass_seconds": detail_pass["detail_pass_seconds"],
