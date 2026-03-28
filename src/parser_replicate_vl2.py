@@ -81,12 +81,12 @@ class ReplicateDeepSeekVL2Parser(LocalParser):
 
         self.predictions_url = f"{self.api_base_url}/predictions"
 
-        print(f"Project root: {self.project_root}")
-        print(f"Data folder: {self.data_dir}")
-        print(f"Output folder: {self.output_dir}")
-        print(f"Using model: {self.model_name}")
-        print(f"Using Replicate version: {self.model_version}")
-        print("Replicate-hosted DeepSeek-VL2 will be called on demand.")
+        self._safe_print(f"Project root: {self.project_root}")
+        self._safe_print(f"Data folder: {self.data_dir}")
+        self._safe_print(f"Output folder: {self.output_dir}")
+        self._safe_print(f"Using model: {self.model_name}")
+        self._safe_print(f"Using Replicate version: {self.model_version}")
+        self._safe_print("Replicate-hosted DeepSeek-VL2 will be called on demand.")
 
     def _resolve_api_token(self, explicit_token: Optional[str]) -> str:
         token = (
@@ -997,13 +997,15 @@ class ReplicateDeepSeekVL2Parser(LocalParser):
         parse_start = perf_counter()
         analysis = self._analyze_text(text, input_type="text")
 
-        print(f"Detected domain: {analysis['domain']}")
-        print(f"Detected complexity: {analysis['complexity']} (score: {analysis['complexity_score']})")
-        print(f"Contains equations: {analysis['has_equations']}")
+        self._safe_print(f"Detected domain: {analysis['domain']}")
+        self._safe_print(
+            f"Detected complexity: {analysis['complexity']} (score: {analysis['complexity_score']})"
+        )
+        self._safe_print(f"Contains equations: {analysis['has_equations']}")
         if analysis["equations_found"]:
-            print(f"Equations found: {analysis['equations_found']}")
+            self._safe_print(f"Equations found: {analysis['equations_found']}")
         if analysis["technical_terms_found"]:
-            print(f"Technical terms: {analysis['technical_terms_found'][:8]}")
+            self._safe_print(f"Technical terms: {analysis['technical_terms_found'][:8]}")
 
         prompt = (
             "Parse this query and respond with valid JSON only.\n"
@@ -1156,20 +1158,20 @@ class ReplicateDeepSeekVL2Parser(LocalParser):
         if not pdf_full_path.exists():
             return {"error": f"PDF not found: {pdf_full_path}"}
 
-        print(f"Processing PDF: {pdf_full_path}")
+        self._safe_print(f"Processing PDF: {pdf_full_path}")
         inspected_metadata, extracted_pdf_text = self._inspect_pdf_metadata(pdf_full_path)
 
         pdf_render_start = perf_counter()
         images = self._pdf_to_images(pdf_full_path)
         pdf_render_seconds = perf_counter() - pdf_render_start
-        print(f"Converted {len(images)} pages to images")
+        self._safe_print(f"Converted {len(images)} pages to images")
 
         if pages:
             images = [images[index] for index in pages if index < len(images)]
 
         max_pages = self.config.get("max_pages", 3)
         if len(images) > max_pages:
-            print(f"Limiting to first {max_pages} pages")
+            self._safe_print(f"Limiting to first {max_pages} pages")
             images = images[:max_pages]
 
         if not images:

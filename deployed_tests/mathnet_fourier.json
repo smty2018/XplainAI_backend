@@ -1,0 +1,122 @@
+{
+  "intent": "ocr_extraction",
+  "secondary_intents": [
+    "equation_visualization"
+  ],
+  "asks": [
+    "shows periodic behavior of sine and cosine functions over the interval -5π to 5π. The image displays the graphs of sine and cosine functions, highlighting their periodic nature. trigonometric functions sine cosine periodic function"
+  ],
+  "topic": "trigonometric functions",
+  "domain": "mathematics",
+  "complexity": "intermediate",
+  "language": "english",
+  "key_concepts": [
+    "sine",
+    "cosine",
+    "periodic function"
+  ],
+  "confidence": 0.74,
+  "field_confidence": {
+    "intent_confidence": 0.74,
+    "topic_confidence": 0.71,
+    "domain_confidence": 0.76,
+    "complexity_confidence": 0.73,
+    "language_confidence": 0.77,
+    "equation_confidence": 0.79,
+    "entity_confidence": 0.7,
+    "layout_confidence": 0.69,
+    "document_confidence": 0.71
+  },
+  "equations": [],
+  "entities": {
+    "symbols": [
+      "π"
+    ],
+    "concepts": [
+      "cosine",
+      "sine"
+    ],
+    "variables": [],
+    "constants": [],
+    "units": [],
+    "names": [],
+    "dates": [],
+    "amounts": [],
+    "addresses": []
+  },
+  "key_value_pairs": [],
+  "layout_elements": [],
+  "tables": [],
+  "figures": [],
+  "grounding": [],
+  "reading_order": [],
+  "source_spans": [],
+  "verification_targets": {
+    "sympy": false,
+    "unit_check": false,
+    "constraint_check": false,
+    "edge_case_check": false
+  },
+  "retrieval_targets": {
+    "similar_problems": false,
+    "misconceptions": false,
+    "visualization_patterns": true,
+    "explanation_style": false
+  },
+  "document_metadata": {
+    "title": "",
+    "authors": [],
+    "references": [],
+    "page_count": 1,
+    "detected_language": "en",
+    "is_scanned": true,
+    "has_text_layer": false
+  },
+  "quality_flags": {
+    "has_equations": false,
+    "ocr_used": true,
+    "low_confidence_regions": [],
+    "garbled_text_detected": false,
+    "rotated_page": false,
+    "complex_layout": false,
+    "handwritten_content": false
+  },
+  "output_format_hint": "json",
+  "_analysis": {
+    "input_type": "image",
+    "has_equations": false,
+    "complexity": "intermediate",
+    "complexity_score": 38,
+    "technical_terms_found": [
+      "cosine",
+      "sine"
+    ],
+    "equations_found": [],
+    "language": "en",
+    "secondary_intents": [
+      "equation_visualization"
+    ],
+    "asks": [
+      "shows periodic behavior of sine and cosine functions over the interval -5π to 5π. The image displays the graphs of sine and cosine functions, highlighting their periodic nature. trigonometric functions sine cosine periodic function"
+    ]
+  },
+  "_model": "deepseek-ai/deepseek-vl2",
+  "_api_backend": "replicate",
+  "_timing": {
+    "model_name": "deepseek-ai/deepseek-vl2",
+    "model_loaded_now": false,
+    "model_load_seconds": 0.0,
+    "input_preparation_seconds": 0.001,
+    "generation_seconds": 8.99,
+    "decode_seconds": 0.0,
+    "model_call_seconds": 9.697,
+    "prediction_id": "bcmbhm03adrnc0cx61jtkcs4xr",
+    "prediction_status": "succeeded",
+    "image_bytes": 10847,
+    "image_width": 284,
+    "image_height": 246,
+    "jpeg_quality": 80,
+    "total_parse_seconds": 9.699
+  },
+  "_uploaded_filename": "mathnet_fourier.png"
+}

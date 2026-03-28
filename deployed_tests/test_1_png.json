@@ -1,0 +1,151 @@
+{
+  "intent": "ocr_extraction",
+  "secondary_intents": [],
+  "asks": [
+    "Kirchhoff's current law \\sum_{k=1}^n I_k = 0 Kirchhoff's voltage law \\sum_{k=1}^n V_k = 0 Kirchhoff's laws Kirchhoff's current law Kirchhoff's voltage law"
+  ],
+  "topic": "Kirchhoff's laws",
+  "domain": "engineering",
+  "complexity": "basic",
+  "language": "english",
+  "key_concepts": [
+    "Kirchhoff's current law",
+    "Kirchhoff's voltage law",
+    "current law",
+    "voltage law",
+    "kirchhoff"
+  ],
+  "confidence": 0.88,
+  "field_confidence": {
+    "intent_confidence": 0.88,
+    "topic_confidence": 0.85,
+    "domain_confidence": 0.9,
+    "complexity_confidence": 0.87,
+    "language_confidence": 0.91,
+    "equation_confidence": 0.93,
+    "entity_confidence": 0.84,
+    "layout_confidence": 0.83,
+    "document_confidence": 0.85
+  },
+  "equations": [
+    {
+      "raw": "\\sum_{k=1}^n I_k = 0",
+      "latex": "\\sum_{k=1}^n I_k = 0",
+      "confidence": 0.93,
+      "bbox": null,
+      "page": 1
+    },
+    {
+      "raw": "\\sum_{k=1}^n V_k = 0",
+      "latex": "\\sum_{k=1}^n V_k = 0",
+      "confidence": 0.93,
+      "bbox": null,
+      "page": 1
+    }
+  ],
+  "entities": {
+    "symbols": [],
+    "concepts": [
+      "current law",
+      "voltage law",
+      "kirchhoff",
+      "current",
+      "voltage"
+    ],
+    "variables": [
+      "k",
+      "n",
+      "I_k",
+      "V_k"
+    ],
+    "constants": [],
+    "units": [
+      "s"
+    ],
+    "names": [],
+    "dates": [],
+    "amounts": [],
+    "addresses": []
+  },
+  "key_value_pairs": [],
+  "layout_elements": [],
+  "tables": [],
+  "figures": [],
+  "grounding": [],
+  "reading_order": [],
+  "source_spans": [],
+  "verification_targets": {
+    "sympy": true,
+    "unit_check": true,
+    "constraint_check": false,
+    "edge_case_check": false
+  },
+  "retrieval_targets": {
+    "similar_problems": false,
+    "misconceptions": false,
+    "visualization_patterns": false,
+    "explanation_style": false
+  },
+  "document_metadata": {
+    "title": "",
+    "authors": [],
+    "references": [],
+    "page_count": 1,
+    "detected_language": "en",
+    "is_scanned": true,
+    "has_text_layer": false
+  },
+  "quality_flags": {
+    "has_equations": true,
+    "ocr_used": true,
+    "low_confidence_regions": [],
+    "garbled_text_detected": false,
+    "rotated_page": false,
+    "complex_layout": false,
+    "handwritten_content": false
+  },
+  "output_format_hint": "latex",
+  "_analysis": {
+    "input_type": "image",
+    "has_equations": true,
+    "complexity": "advanced",
+    "complexity_score": 60,
+    "technical_terms_found": [
+      "current law",
+      "voltage law",
+      "kirchhoff",
+      "current",
+      "voltage"
+    ],
+    "equations_found": [
+      "sum_{k=1}^n I_k",
+      "sum_{k=1}^n V_k"
+    ],
+    "language": "en",
+    "secondary_intents": [],
+    "asks": [
+      "Kirchhoff's current law \\sum_{k=1}^n I_k = 0 Kirchhoff's voltage law \\sum_{k=1}^n V_k = 0 Kirchhoff's laws Kirchhoff's current law Kirchhoff's voltage law"
+    ]
+  },
+  "_model": "deepseek-ai/deepseek-vl2",
+  "_api_backend": "replicate",
+  "_timing": {
+    "model_name": "deepseek-ai/deepseek-vl2",
+    "model_loaded_now": false,
+    "model_load_seconds": 0.0,
+    "input_preparation_seconds": 0.065,
+    "generation_seconds": 15.237,
+    "decode_seconds": 0.0,
+    "model_call_seconds": 104.181,
+    "prediction_id": "gn919s4kkhrnc0cx61g96wy0x4",
+    "prediction_status": "succeeded",
+    "image_bytes": 11794,
+    "image_width": 624,
+    "image_height": 234,
+    "jpeg_quality": 80,
+    "detail_pass_seconds": 11.298,
+    "detail_pass_applied": true,
+    "total_parse_seconds": 115.59
+  },
+  "_uploaded_filename": "test_1.png"
+}

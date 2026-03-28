@@ -19,11 +19,11 @@ def main():
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8")
 
-    parser = argparse.ArgumentParser(description="XplainAI Local Parser")
-    parser.add_argument("input", help="Input text, image path, or PDF path")
+    parser = argparse.ArgumentParser(description="XplainAI Parser and Reasoner")
+    parser.add_argument("input", help="Input text, image path, PDF path, or saved parser JSON path")
     parser.add_argument(
         "--type",
-        choices=["text", "image", "pdf", "auto"],
+        choices=["text", "image", "pdf", "json", "auto"],
         default="auto",
         help="Input type",
     )
@@ -52,8 +52,32 @@ def main():
         action="store_true",
         help="Include a public reasoning trace summary in the solution output",
     )
+    parser.add_argument(
+        "--scene-planner",
+        action="store_true",
+        help="Generate a second-pass Scene Planner prompt for a downstream Manim code generator",
+    )
+    parser.add_argument(
+        "--manim-code",
+        action="store_true",
+        help="Generate final Manim code using the Scene Planner plus few-shot layout guidance",
+    )
+    parser.add_argument(
+        "--animation-prompt",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
 
     args = parser.parse_args()
+
+    if args.animation_prompt:
+        args.scene_planner = True
+
+    if args.manim_code:
+        args.scene_planner = True
+
+    if args.scene_planner:
+        args.reason = True
 
     print("=" * 50)
     print("XplainAI Parser" + (" + Reasoner" if args.reason else ""))
@@ -79,6 +103,8 @@ def main():
             input_type=args.type,
             prompt_text=args.prompt,
             include_reasoning_trace=args.reason_trace,
+            generate_scene_planner=args.scene_planner,
+            generate_manim_code=args.manim_code,
         )
     elif args.type == "auto":
         input_path = Path(args.input)
@@ -118,6 +144,18 @@ def main():
         print("PIPELINE METADATA:")
         print("=" * 50)
         print(json.dumps(result.get("pipeline_metadata", {}), indent=2, ensure_ascii=False))
+
+        if args.scene_planner:
+            print("\n" + "=" * 50)
+            print("SCENE PLANNER:")
+            print("=" * 50)
+            print((result.get("scene_planner", {}) or {}).get("text", ""))
+
+        if args.manim_code:
+            print("\n" + "=" * 50)
+            print("MANIM CODE:")
+            print("=" * 50)
+            print((result.get("manim_code", {}) or {}).get("text", ""))
     else:
         print("\n" + "=" * 50)
         print("PARSING RESULT:")

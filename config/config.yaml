@@ -16,6 +16,19 @@ replicate_poll_interval_seconds: 2
 replicate_max_inline_image_bytes: 900000
 replicate_max_image_side: 1400
 reasoning_model: "deepseek-ai/deepseek-math-7b-instruct"
+reasoning_api_model: "deepseek-reasoner"
+reasoning_api_base_url: "https://api.deepseek.com"
+reasoning_api_timeout_seconds: 180
+reasoning_api_retries: 3
+reasoning_api_retry_backoff_seconds: 2.0
+reasoning_api_max_tokens: 8192
+scene_planner_model: "deepseek-reasoner"
+scene_planner_max_tokens: 4096
+manim_code_model: "deepseek-reasoner"
+manim_code_max_tokens: 8192
+manim_layout_refiner_model: "deepseek-reasoner"
+manim_layout_refiner_max_tokens: 8192
+prompt_assets_dir: "./prompt_assets"
 use_gpu: false
 max_pages: 3
 

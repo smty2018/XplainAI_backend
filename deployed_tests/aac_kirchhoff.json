@@ -1,0 +1,139 @@
+{
+  "intent": "ocr_extraction",
+  "secondary_intents": [],
+  "asks": [
+    "I_entering + (-I_exiting) = 0 conservation of charge current charge conservation"
+  ],
+  "topic": "conservation of charge",
+  "domain": "engineering",
+  "complexity": "basic",
+  "language": "english",
+  "key_concepts": [
+    "current conservation",
+    "incoming and outgoing currents",
+    "current",
+    "charge conservation"
+  ],
+  "confidence": 0.8,
+  "field_confidence": {
+    "intent_confidence": 0.8,
+    "topic_confidence": 0.77,
+    "domain_confidence": 0.82,
+    "complexity_confidence": 0.79,
+    "language_confidence": 0.83,
+    "equation_confidence": 0.85,
+    "entity_confidence": 0.76,
+    "layout_confidence": 0.75,
+    "document_confidence": 0.77
+  },
+  "equations": [
+    {
+      "raw": "I_entering + (-I_exiting) = 0",
+      "latex": "I_{entering} + (-I_{exiting}) = 0",
+      "confidence": 0.85,
+      "bbox": null,
+      "page": 1
+    },
+    {
+      "raw": "l_entering + (-1_exiting) = 0",
+      "latex": "l_{entering} + (-1_{exiting}) = 0",
+      "confidence": 0.68,
+      "bbox": null,
+      "page": 1
+    }
+  ],
+  "entities": {
+    "symbols": [],
+    "concepts": [
+      "current"
+    ],
+    "variables": [
+      "I_entering",
+      "I_exiting",
+      "l_entering",
+      "exiting"
+    ],
+    "constants": [],
+    "units": [],
+    "names": [],
+    "dates": [],
+    "amounts": [],
+    "addresses": []
+  },
+  "key_value_pairs": [],
+  "layout_elements": [],
+  "tables": [],
+  "figures": [],
+  "grounding": [],
+  "reading_order": [],
+  "source_spans": [],
+  "verification_targets": {
+    "sympy": true,
+    "unit_check": false,
+    "constraint_check": false,
+    "edge_case_check": false
+  },
+  "retrieval_targets": {
+    "similar_problems": false,
+    "misconceptions": false,
+    "visualization_patterns": false,
+    "explanation_style": false
+  },
+  "document_metadata": {
+    "title": "",
+    "authors": [],
+    "references": [],
+    "page_count": 1,
+    "detected_language": "en",
+    "is_scanned": true,
+    "has_text_layer": false
+  },
+  "quality_flags": {
+    "has_equations": true,
+    "ocr_used": true,
+    "low_confidence_regions": [],
+    "garbled_text_detected": false,
+    "rotated_page": false,
+    "complex_layout": false,
+    "handwritten_content": false
+  },
+  "output_format_hint": "latex",
+  "_analysis": {
+    "input_type": "image",
+    "has_equations": true,
+    "complexity": "intermediate",
+    "complexity_score": 37,
+    "technical_terms_found": [
+      "current"
+    ],
+    "equations_found": [
+      "I_entering + (-I_exiting) = 0\nconservation of charge\ncurrent\ncharge conservation"
+    ],
+    "language": "en",
+    "secondary_intents": [],
+    "asks": [
+      "I_entering + (-I_exiting) = 0 conservation of charge current charge conservation"
+    ]
+  },
+  "_model": "deepseek-ai/deepseek-vl2",
+  "_api_backend": "replicate",
+  "_timing": {
+    "model_name": "deepseek-ai/deepseek-vl2",
+    "model_loaded_now": false,
+    "model_load_seconds": 0.0,
+    "input_preparation_seconds": 0.0,
+    "generation_seconds": 8.687,
+    "decode_seconds": 0.0,
+    "model_call_seconds": 8.984,
+    "prediction_id": "b9ffh0v5e5rnc0cx61jvgtkt18",
+    "prediction_status": "succeeded",
+    "image_bytes": 1710,
+    "image_width": 175,
+    "image_height": 25,
+    "jpeg_quality": 80,
+    "detail_pass_seconds": 8.951,
+    "detail_pass_applied": true,
+    "total_parse_seconds": 17.937
+  },
+  "_uploaded_filename": "aac_kirchhoff.png"
+}

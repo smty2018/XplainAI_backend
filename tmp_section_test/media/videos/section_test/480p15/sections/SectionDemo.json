@@ -1,0 +1,38 @@
+[
+    {
+        "name": "intro",
+        "type": "default.normal",
+        "video": "SectionDemo_0000_intro.mp4",
+        "width": 854,
+        "height": 480,
+        "nb_frames": "16",
+        "duration": "1.066667",
+        "avg_frame_rate": "15/1",
+        "codec_name": "h264",
+        "pix_fmt": "yuv420p"
+    },
+    {
+        "name": "middle",
+        "type": "default.normal",
+        "video": "SectionDemo_0001_middle.mp4",
+        "width": 854,
+        "height": 480,
+        "nb_frames": "16",
+        "duration": "1.066667",
+        "avg_frame_rate": "15/1",
+        "codec_name": "h264",
+        "pix_fmt": "yuv420p"
+    },
+    {
+        "name": "end",
+        "type": "default.normal",
+        "video": "SectionDemo_0002_end.mp4",
+        "width": 854,
+        "height": 480,
+        "nb_frames": "16",
+        "duration": "1.066667",
+        "avg_frame_rate": "15/1",
+        "codec_name": "h264",
+        "pix_fmt": "yuv420p"
+    }
+]

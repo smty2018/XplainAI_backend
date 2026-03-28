@@ -1,0 +1,50 @@
+[
+    {
+        "name": "Scene 1: Introduction",
+        "type": "default.normal",
+        "video": "visualization_0000_Scene 1: Introduction.mp4",
+        "width": 854,
+        "height": 480,
+        "nb_frames": "263",
+        "duration": "17.533333",
+        "avg_frame_rate": "15/1",
+        "codec_name": "h264",
+        "pix_fmt": "yuv420p"
+    },
+    {
+        "name": "Scene 2: Discriminant",
+        "type": "default.normal",
+        "video": "visualization_0001_Scene 2: Discriminant.mp4",
+        "width": 854,
+        "height": 480,
+        "nb_frames": "206",
+        "duration": "13.733333",
+        "avg_frame_rate": "15/1",
+        "codec_name": "h264",
+        "pix_fmt": "yuv420p"
+    },
+    {
+        "name": "Scene 3: Quadratic Formula",
+        "type": "default.normal",
+        "video": "visualization_0002_Scene 3: Quadratic Formula.mp4",
+        "width": 854,
+        "height": 480,
+        "nb_frames": "198",
+        "duration": "13.200000",
+        "avg_frame_rate": "15/1",
+        "codec_name": "h264",
+        "pix_fmt": "yuv420p"
+    },
+    {
+        "name": "Scene 4: Conclusion",
+        "type": "default.normal",
+        "video": "visualization_0003_Scene 4: Conclusion.mp4",
+        "width": 854,
+        "height": 480,
+        "nb_frames": "180",
+        "duration": "12.000000",
+        "avg_frame_rate": "15/1",
+        "codec_name": "h264",
+        "pix_fmt": "yuv420p"
+    }
+]

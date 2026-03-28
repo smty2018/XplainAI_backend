@@ -1,0 +1,14 @@
+[
+    {
+        "name": "autocreated",
+        "type": "default.normal",
+        "video": "visualization_0000_autocreated.mp4",
+        "width": 854,
+        "height": 480,
+        "nb_frames": "359",
+        "duration": "23.933333",
+        "avg_frame_rate": "15/1",
+        "codec_name": "h264",
+        "pix_fmt": "yuv420p"
+    }
+]

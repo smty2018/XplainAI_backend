@@ -59,3 +59,28 @@ The easiest path is Render.
    - `https://your-service.onrender.com/docs`
 
 Your friends can test directly from the Swagger UI without writing code.
+
+## Streamlit App
+
+This repo also includes a local Streamlit frontend for the full pipeline:
+
+- upload text, images, or PDFs
+- run parsing, reasoning, Scene Planner generation, and Manim code generation
+- render the generated animation locally and play the resulting video in the browser
+
+### Run locally
+
+```bash
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
+
+Then open the local URL shown by Streamlit, usually:
+
+- `http://localhost:8501`
+
+### Notes
+
+- For `Replicate API` parsing, make sure your Replicate token is in `.env`.
+- For reasoning, make sure your DeepSeek API key is in `.env`.
+- Video rendering uses your local Manim installation, so the first render can take a while.

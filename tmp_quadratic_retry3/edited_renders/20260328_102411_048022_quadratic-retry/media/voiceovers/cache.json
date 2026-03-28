@@ -1,0 +1,74 @@
+[
+  {
+    "input_text": "A quadratic equation is a second-degree polynomial set to zero.",
+    "input_data": {
+      "input_text": "A quadratic equation is a second-degree polynomial set to zero.",
+      "service": "coqui"
+    },
+    "original_audio": "a-quadratic-equation-is-a-second-degree-polynomial-31a815ab.mp3",
+    "final_audio": "a-quadratic-equation-is-a-second-degree-polynomial-31a815ab.mp3"
+  },
+  {
+    "input_text": "Its standard form is a x squared plus b x plus c equals zero, where a, b, and c are coefficients, and a cannot be zero.",
+    "input_data": {
+      "input_text": "Its standard form is a x squared plus b x plus c equals zero, where a, b, and c are coefficients, and a cannot be zero.",
+      "service": "coqui"
+    },
+    "original_audio": "its-standard-form-is-a-x-squared-plus-b-x-plus-c-63b30c06.mp3",
+    "final_audio": "its-standard-form-is-a-x-squared-plus-b-x-plus-c-63b30c06.mp3"
+  },
+  {
+    "input_text": "The graph of a quadratic is a parabola. Its x-intercepts are called roots.",
+    "input_data": {
+      "input_text": "The graph of a quadratic is a parabola. Its x-intercepts are called roots.",
+      "service": "coqui"
+    },
+    "original_audio": "the-graph-of-a-quadratic-is-a-parabola-its-x-2e129a76.mp3",
+    "final_audio": "the-graph-of-a-quadratic-is-a-parabola-its-x-2e129a76.mp3"
+  },
+  {
+    "input_text": "The discriminant, Delta, equals b squared minus 4 a c.",
+    "input_data": {
+      "input_text": "The discriminant, Delta, equals b squared minus 4 a c.",
+      "service": "coqui"
+    },
+    "original_audio": "the-discriminant-delta-equals-b-squared-minus-4-a-4519bcdc.mp3",
+    "final_audio": "the-discriminant-delta-equals-b-squared-minus-4-a-4519bcdc.mp3"
+  },
+  {
+    "input_text": "Its value determines the nature of the roots.",
+    "input_data": {
+      "input_text": "Its value determines the nature of the roots.",
+      "service": "coqui"
+    },
+    "original_audio": "its-value-determines-the-nature-of-the-roots-a82675b9.mp3",
+    "final_audio": "its-value-determines-the-nature-of-the-roots-a82675b9.mp3"
+  },
+  {
+    "input_text": "The quadratic formula gives the roots directly.",
+    "input_data": {
+      "input_text": "The quadratic formula gives the roots directly.",
+      "service": "coqui"
+    },
+    "original_audio": "the-quadratic-formula-gives-the-roots-directly-d503b75c.mp3",
+    "final_audio": "the-quadratic-formula-gives-the-roots-directly-d503b75c.mp3"
+  },
+  {
+    "input_text": "The plus-minus symbol accounts for both solutions, and the discriminant sits inside the square root.",
+    "input_data": {
+      "input_text": "The plus-minus symbol accounts for both solutions, and the discriminant sits inside the square root.",
+      "service": "coqui"
+    },
+    "original_audio": "the-plus-minus-symbol-accounts-for-both-solutions-1176fc4c.mp3",
+    "final_audio": "the-plus-minus-symbol-accounts-for-both-solutions-1176fc4c.mp3"
+  },
+  {
+    "input_text": "These are the roots. They solve the equation and are precisely the x-intercepts of the parabola.",
+    "input_data": {
+      "input_text": "These are the roots. They solve the equation and are precisely the x-intercepts of the parabola.",
+      "service": "coqui"
+    },
+    "original_audio": "these-are-the-roots-they-solve-the-equation-and-f9bb5378.mp3",
+    "final_audio": "these-are-the-roots-they-solve-the-equation-and-f9bb5378.mp3"
+  }
+]

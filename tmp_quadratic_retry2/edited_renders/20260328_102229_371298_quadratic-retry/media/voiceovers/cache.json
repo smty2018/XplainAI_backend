@@ -1,0 +1,29 @@
+[
+  {
+    "input_text": "A quadratic equation is a second-degree polynomial set to zero.",
+    "input_data": {
+      "input_text": "A quadratic equation is a second-degree polynomial set to zero.",
+      "service": "coqui"
+    },
+    "original_audio": "a-quadratic-equation-is-a-second-degree-polynomial-31a815ab.mp3",
+    "final_audio": "a-quadratic-equation-is-a-second-degree-polynomial-31a815ab.mp3"
+  },
+  {
+    "input_text": "Its standard form is a x squared plus b x plus c equals zero, where a, b, and c are coefficients, and a cannot be zero.",
+    "input_data": {
+      "input_text": "Its standard form is a x squared plus b x plus c equals zero, where a, b, and c are coefficients, and a cannot be zero.",
+      "service": "coqui"
+    },
+    "original_audio": "its-standard-form-is-a-x-squared-plus-b-x-plus-c-63b30c06.mp3",
+    "final_audio": "its-standard-form-is-a-x-squared-plus-b-x-plus-c-63b30c06.mp3"
+  },
+  {
+    "input_text": "The graph of a quadratic is a parabola. Its x-intercepts are called roots.",
+    "input_data": {
+      "input_text": "The graph of a quadratic is a parabola. Its x-intercepts are called roots.",
+      "service": "coqui"
+    },
+    "original_audio": "the-graph-of-a-quadratic-is-a-parabola-its-x-2e129a76.mp3",
+    "final_audio": "the-graph-of-a-quadratic-is-a-parabola-its-x-2e129a76.mp3"
+  }
+]

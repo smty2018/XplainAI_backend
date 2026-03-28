@@ -28,7 +28,7 @@ class LocalParser:
 
     def __init__(self, config_path: str = "config/config.yaml"):
         self.project_root = Path(__file__).parent.parent
-        print(f"Project root: {self.project_root}")
+        self._safe_print(f"Project root: {self.project_root}")
 
         self.config = self._load_config(config_path)
         self.model_name = self.config["vl2_model"]
@@ -44,15 +44,15 @@ class LocalParser:
         os.environ["HF_HOME"] = str(self.model_cache)
         os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 
-        print(f"Models will be downloaded to: {self.model_cache}")
-        print(f"Data folder: {self.data_dir}")
-        print(f"Output folder: {self.output_dir}")
+        self._safe_print(f"Models will be downloaded to: {self.model_cache}")
+        self._safe_print(f"Data folder: {self.data_dir}")
+        self._safe_print(f"Output folder: {self.output_dir}")
 
         self.device = self._get_device()
         self.model_dtype = self._get_model_dtype()
-        print(f"Using device: {self.device}")
-        print(f"Using model: {self.model_name}")
-        print("DeepSeek-VL2 Tiny will be loaded on first use.")
+        self._safe_print(f"Using device: {self.device}")
+        self._safe_print(f"Using model: {self.model_name}")
+        self._safe_print("DeepSeek-VL2 Tiny will be loaded on first use.")
 
         self.model = None
         self.processor = None
@@ -130,6 +130,20 @@ class LocalParser:
                 "transfer function",
             ],
         }
+
+    def _safe_print(self, message: Any) -> None:
+        """Print without crashing on Windows codepage limitations."""
+        text = str(message)
+        stream = getattr(sys, "stdout", None)
+        encoding = getattr(stream, "encoding", None) or "utf-8"
+        try:
+            print(text)
+        except UnicodeEncodeError:
+            safe_text = text.encode(encoding, errors="replace").decode(encoding, errors="replace")
+            if stream and hasattr(stream, "write"):
+                stream.write(safe_text + "\n")
+            else:
+                logger.info(safe_text)
         self.topic_patterns = [
             (r"schr[öo]dinger equation", "Schrödinger equation"),
             (r"maxwell(?:'s)? equations?", "Maxwell's equations"),
@@ -257,10 +271,10 @@ class LocalParser:
 
         load_start = perf_counter()
 
-        print("=" * 50)
-        print("LOADING MODEL: tiny")
-        print("=" * 50)
-        print(f"Loading {self.model_name}...")
+        self._safe_print("=" * 50)
+        self._safe_print("LOADING MODEL: tiny")
+        self._safe_print("=" * 50)
+        self._safe_print(f"Loading {self.model_name}...")
 
         DeepseekVLV2ForCausalLM, DeepseekVLV2Processor = self._load_vl2_classes()
 
@@ -279,7 +293,7 @@ class LocalParser:
         )
         self.model = self.model.to(self.device).eval()
 
-        print(f"{self.model_name} loaded successfully.")
+        self._safe_print(f"{self.model_name} loaded successfully.")
 
         return {
             "model_name": self.model_name,
@@ -1788,13 +1802,15 @@ class LocalParser:
         parse_start = perf_counter()
         analysis = self._analyze_text(text, input_type="text")
 
-        print(f"Detected domain: {analysis['domain']}")
-        print(f"Detected complexity: {analysis['complexity']} (score: {analysis['complexity_score']})")
-        print(f"Contains equations: {analysis['has_equations']}")
+        self._safe_print(f"Detected domain: {analysis['domain']}")
+        self._safe_print(
+            f"Detected complexity: {analysis['complexity']} (score: {analysis['complexity_score']})"
+        )
+        self._safe_print(f"Contains equations: {analysis['has_equations']}")
         if analysis["equations_found"]:
-            print(f"Equations found: {analysis['equations_found']}")
+            self._safe_print(f"Equations found: {analysis['equations_found']}")
         if analysis["technical_terms_found"]:
-            print(f"Technical terms: {analysis['technical_terms_found'][:8]}")
+            self._safe_print(f"Technical terms: {analysis['technical_terms_found'][:8]}")
 
         prompt = (
             "Parse this query and respond with valid JSON only.\n"
@@ -1906,20 +1922,20 @@ class LocalParser:
         if not pdf_full_path.exists():
             return {"error": f"PDF not found: {pdf_full_path}"}
 
-        print(f"Processing PDF: {pdf_full_path}")
+        self._safe_print(f"Processing PDF: {pdf_full_path}")
         inspected_metadata, extracted_pdf_text = self._inspect_pdf_metadata(pdf_full_path)
 
         pdf_render_start = perf_counter()
         images = self._pdf_to_images(pdf_full_path)
         pdf_render_seconds = perf_counter() - pdf_render_start
-        print(f"Converted {len(images)} pages to images")
+        self._safe_print(f"Converted {len(images)} pages to images")
 
         if pages:
             images = [images[index] for index in pages if index < len(images)]
 
         max_pages = self.config.get("max_pages", 3)
         if len(images) > max_pages:
-            print(f"Limiting to first {max_pages} pages")
+            self._safe_print(f"Limiting to first {max_pages} pages")
             images = images[:max_pages]
 
         prompt = (
@@ -1971,7 +1987,7 @@ class LocalParser:
         document = fitz.open(str(pdf_path))
 
         for page_num in range(len(document)):
-            print(f"  Converting page {page_num + 1}/{len(document)}")
+            self._safe_print(f"  Converting page {page_num + 1}/{len(document)}")
             page = document[page_num]
             pixmap = page.get_pixmap(matrix=fitz.Matrix(dpi / 72, dpi / 72))
             image_bytes = pixmap.tobytes("png")
@@ -2097,7 +2113,7 @@ class LocalParser:
         if salvaged:
             return salvaged
         if parse_error is not None:
-            print(f"JSON extraction failed: {parse_error}")
+            self._safe_print(f"JSON extraction failed: {parse_error}")
         return {
             "_parse_error": "Could not parse JSON",
             "_raw_response_preview": text[:500],
@@ -2111,7 +2127,7 @@ class LocalParser:
         with open(output_file, "w", encoding="utf-8") as handle:
             json.dump(result, handle, indent=2, ensure_ascii=False)
 
-        print(f"Result saved to {output_file}")
+        self._safe_print(f"Result saved to {output_file}")
 
     def get_stats(self) -> Dict:
         """Return local storage statistics in MB."""

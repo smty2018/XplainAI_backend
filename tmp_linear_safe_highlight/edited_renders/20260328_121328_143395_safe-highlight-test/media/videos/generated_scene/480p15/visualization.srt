@@ -1,0 +1,48 @@
+1
+00:00:00,000 --> 00:00:04,157
+We need to solve for x in the equation: x minus two equals zero.
+
+2
+00:00:05,200 --> 00:00:08,468
+To isolate x, we perform the inverse operation. Adding
+
+3
+00:00:08,568 --> 00:00:11,212
+2 to both sides keeps the equation balanced.
+
+4
+00:00:11,266 --> 00:00:13,543
+Simplifying gives us the solution.
+
+5
+00:00:16,200 --> 00:00:20,067
+We can confirm this solution graphically. The equation x minus
+
+6
+00:00:20,167 --> 00:00:23,522
+two equals zero is equivalent to setting y equals zero
+
+7
+00:00:23,622 --> 00:00:25,634
+in the line y equals x minus two.
+
+8
+00:00:25,733 --> 00:00:27,778
+The solution x equals two is the
+
+9
+00:00:27,878 --> 00:00:30,727
+x-intercept where the line crosses the axis.
+
+10
+00:00:31,800 --> 00:00:35,356
+Let's verify. Substituting 2 back into the original
+
+11
+00:00:35,456 --> 00:00:38,726
+equation gives zero equals zero, which is true.
+
+12
+00:00:38,800 --> 00:00:40,946
+Therefore, our solution is correct.
+

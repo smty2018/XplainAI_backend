@@ -1,0 +1,65 @@
+[
+  {
+    "input_text": "We need to solve for x in the equation: x minus two equals zero.",
+    "input_data": {
+      "input_text": "We need to solve for x in the equation: x minus two equals zero.",
+      "service": "coqui"
+    },
+    "original_audio": "we-need-to-solve-for-x-in-the-equation-x-minus-two-7ccdb3fa.mp3",
+    "final_audio": "we-need-to-solve-for-x-in-the-equation-x-minus-two-7ccdb3fa.mp3"
+  },
+  {
+    "input_text": "To isolate x, we perform the inverse operation. Adding 2 to both sides keeps the equation balanced.",
+    "input_data": {
+      "input_text": "To isolate x, we perform the inverse operation. Adding 2 to both sides keeps the equation balanced.",
+      "service": "coqui"
+    },
+    "original_audio": "to-isolate-x-we-perform-the-inverse-operation-51e8a1b3.mp3",
+    "final_audio": "to-isolate-x-we-perform-the-inverse-operation-51e8a1b3.mp3"
+  },
+  {
+    "input_text": "Simplifying gives us the solution.",
+    "input_data": {
+      "input_text": "Simplifying gives us the solution.",
+      "service": "coqui"
+    },
+    "original_audio": "simplifying-gives-us-the-solution-3e8c136b.mp3",
+    "final_audio": "simplifying-gives-us-the-solution-3e8c136b.mp3"
+  },
+  {
+    "input_text": "We can confirm this solution graphically. The equation x minus two equals zero is equivalent to setting y equals zero in the line y equals x minus two.",
+    "input_data": {
+      "input_text": "We can confirm this solution graphically. The equation x minus two equals zero is equivalent to setting y equals zero in the line y equals x minus two.",
+      "service": "coqui"
+    },
+    "original_audio": "we-can-confirm-this-solution-graphically-the-74d4666c.mp3",
+    "final_audio": "we-can-confirm-this-solution-graphically-the-74d4666c.mp3"
+  },
+  {
+    "input_text": "The solution x equals two is the x-intercept where the line crosses the axis.",
+    "input_data": {
+      "input_text": "The solution x equals two is the x-intercept where the line crosses the axis.",
+      "service": "coqui"
+    },
+    "original_audio": "the-solution-x-equals-two-is-the-x-intercept-where-16029c60.mp3",
+    "final_audio": "the-solution-x-equals-two-is-the-x-intercept-where-16029c60.mp3"
+  },
+  {
+    "input_text": "Let's verify. Substituting 2 back into the original equation gives zero equals zero, which is true.",
+    "input_data": {
+      "input_text": "Let's verify. Substituting 2 back into the original equation gives zero equals zero, which is true.",
+      "service": "coqui"
+    },
+    "original_audio": "let-s-verify-substituting-2-back-into-the-original-7d1086c1.mp3",
+    "final_audio": "let-s-verify-substituting-2-back-into-the-original-7d1086c1.mp3"
+  },
+  {
+    "input_text": "Therefore, our solution is correct.",
+    "input_data": {
+      "input_text": "Therefore, our solution is correct.",
+      "service": "coqui"
+    },
+    "original_audio": "therefore-our-solution-is-correct-67d03919.mp3",
+    "final_audio": "therefore-our-solution-is-correct-67d03919.mp3"
+  }
+]

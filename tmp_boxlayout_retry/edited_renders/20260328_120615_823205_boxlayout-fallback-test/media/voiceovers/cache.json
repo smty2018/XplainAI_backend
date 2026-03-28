@@ -1,0 +1,20 @@
+[
+  {
+    "input_text": "We need to solve for x in the equation: x minus two equals zero.",
+    "input_data": {
+      "input_text": "We need to solve for x in the equation: x minus two equals zero.",
+      "service": "coqui"
+    },
+    "original_audio": "we-need-to-solve-for-x-in-the-equation-x-minus-two-7ccdb3fa.mp3",
+    "final_audio": "we-need-to-solve-for-x-in-the-equation-x-minus-two-7ccdb3fa.mp3"
+  },
+  {
+    "input_text": "To isolate x, we perform the inverse operation. Adding 2 to both sides keeps the equation balanced.",
+    "input_data": {
+      "input_text": "To isolate x, we perform the inverse operation. Adding 2 to both sides keeps the equation balanced.",
+      "service": "coqui"
+    },
+    "original_audio": "to-isolate-x-we-perform-the-inverse-operation-51e8a1b3.mp3",
+    "final_audio": "to-isolate-x-we-perform-the-inverse-operation-51e8a1b3.mp3"
+  }
+]

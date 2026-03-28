@@ -1,0 +1,48 @@
+1
+00:00:00,000 --> 00:00:04,001
+A quadratic equation is a second-degree polynomial set to zero.
+
+2
+00:00:04,066 --> 00:00:07,509
+Its standard form is a x squared plus b x plus c equals
+
+3
+00:00:07,609 --> 00:00:11,568
+zero, where a, b, and c are coefficients, and a cannot be zero.
+
+4
+00:00:11,666 --> 00:00:13,714
+The graph of a quadratic is a
+
+5
+00:00:13,814 --> 00:00:16,974
+parabola. Its x-intercepts are called roots.
+
+6
+00:00:21,533 --> 00:00:25,168
+The discriminant, Delta, equals b squared minus 4 a c.
+
+7
+00:00:25,266 --> 00:00:28,170
+Its value determines the nature of the roots.
+
+8
+00:00:34,266 --> 00:00:37,196
+The quadratic formula gives the roots directly.
+
+9
+00:00:38,266 --> 00:00:41,301
+The plus-minus symbol accounts for both solutions, and
+
+10
+00:00:41,401 --> 00:00:43,913
+the discriminant sits inside the square root.
+
+11
+00:00:48,466 --> 00:00:51,161
+These are the roots. They solve the equation
+
+12
+00:00:51,261 --> 00:00:54,400
+and are precisely the x-intercepts of the parabola.
+

@@ -1,0 +1,213 @@
+{
+  "intent": "document_extraction",
+  "secondary_intents": [],
+  "asks": [
+    "3D Geometry – Exam Ready Notes Distance Between Two Points 3D Geometry – Exam Ready Notes 1. Distance Between Two Points Given points P(x1, y1, z1) and Q(x2, y2, z2): d = √[(x2 − x1)² + (y2 − y1)² + (z2 − z1)²] 2. Direction Cosines If a line makes angles α, β, γ with x, y, z axes: l = cosα, m = cosβ, n = cosγ l² + m² + n² = 1 3. Equation of a Line Vector Form: r = a + λb Cartesian Form: (x − x1)/l = (y − y1)/m = (z − z1)/n 4. Equation of a Plane General Form: Ax + By + Cz + D = 0 Normal Form: x cosα + y cosβ + z cosγ = p Practice Problems (JEE Style) 1 Find the distance between points (1, 2, 3) and (4, −2, 5). 2 Find direction cosines of a line equally inclined to all axes. 3 Find equation of line passing through (1, 2, 3) with direction ratios (2, −1, 2). 4 Find angle between planes: 2x + y − z = 3 and x − y + 2z = 5. 5 Find shortest distance from point (2, −1, 4) to plane x + 2y + 2z = 9. Key Tip: Always normalize direction ratios when needed and remember dot product rules for angles"
+  ],
+  "topic": "Distance Between Two Points",
+  "domain": "mathematics",
+  "complexity": "basic",
+  "language": "en",
+  "key_concepts": [
+    "3D Geometry – Exam Ready Notes",
+    "Distance Between Two Points",
+    "Direction Cosines",
+    "Equation of a Line",
+    "Equation of a Plane",
+    "cosine"
+  ],
+  "confidence": 0.64,
+  "field_confidence": {
+    "intent_confidence": 0.64,
+    "topic_confidence": 0.61,
+    "domain_confidence": 0.66,
+    "complexity_confidence": 0.63,
+    "language_confidence": 0.67,
+    "equation_confidence": 0.69,
+    "entity_confidence": 0.6,
+    "layout_confidence": 0.59,
+    "document_confidence": 0.61
+  },
+  "equations": [
+    {
+      "raw": "d = √[(x2 − x1)² + (y2 − y1)² + (z2 − z1)²]",
+      "latex": "d = √[(x2 − x1)² + (y2 − y1)² + (z2 − z1)²]",
+      "confidence": 0.69,
+      "bbox": null,
+      "page": 1
+    },
+    {
+      "raw": "l = cosα, m = cosβ, n = cosγ",
+      "latex": "l = cosα, m = cosβ, n = cosγ",
+      "confidence": 0.69,
+      "bbox": null,
+      "page": 1
+    },
+    {
+      "raw": "l² + m² + n² = 1",
+      "latex": "l² + m² + n² = 1",
+      "confidence": 0.69,
+      "bbox": null,
+      "page": 1
+    },
+    {
+      "raw": "r = a + λb",
+      "latex": "r = a + λb",
+      "confidence": 0.69,
+      "bbox": null,
+      "page": 1
+    },
+    {
+      "raw": "(x − x1)/l = (y − y1)/m = (z − z1)/n",
+      "latex": "(x − x1)/l = (y − y1)/m = (z − z1)/n",
+      "confidence": 0.69,
+      "bbox": null,
+      "page": 1
+    },
+    {
+      "raw": "Ax + By + Cz + D = 0",
+      "latex": "Ax + By + Cz + D = 0",
+      "confidence": 0.69,
+      "bbox": null,
+      "page": 1
+    },
+    {
+      "raw": "x cosα + y cosβ + z cosγ = p",
+      "latex": "x cosα + y cosβ + z cosγ = p",
+      "confidence": 0.69,
+      "bbox": null,
+      "page": 1
+    }
+  ],
+  "entities": {
+    "symbols": [
+      "α",
+      "β",
+      "γ",
+      "λ"
+    ],
+    "concepts": [
+      "3D Geometry – Exam Ready Notes",
+      "Distance Between Two Points",
+      "Direction Cosines",
+      "Equation of a Line",
+      "Equation of a Plane",
+      "cosine",
+      "vector",
+      "sine"
+    ],
+    "variables": [
+      "d",
+      "x",
+      "y",
+      "z",
+      "l",
+      "cosα",
+      "m",
+      "cosβ",
+      "n",
+      "cosγ",
+      "r",
+      "a"
+    ],
+    "constants": [],
+    "units": [
+      "m"
+    ],
+    "names": [],
+    "dates": [],
+    "amounts": [],
+    "addresses": []
+  },
+  "key_value_pairs": [],
+  "layout_elements": [],
+  "tables": [],
+  "figures": [],
+  "grounding": [],
+  "reading_order": [],
+  "source_spans": [],
+  "verification_targets": {
+    "sympy": true,
+    "unit_check": true,
+    "constraint_check": false,
+    "edge_case_check": false
+  },
+  "retrieval_targets": {
+    "similar_problems": false,
+    "misconceptions": false,
+    "visualization_patterns": false,
+    "explanation_style": false
+  },
+  "document_metadata": {
+    "title": "(anonymous)",
+    "authors": [
+      "(anonymous)"
+    ],
+    "references": [],
+    "page_count": 2,
+    "detected_language": "en",
+    "is_scanned": false,
+    "has_text_layer": true
+  },
+  "quality_flags": {
+    "has_equations": true,
+    "ocr_used": true,
+    "low_confidence_regions": [],
+    "garbled_text_detected": false,
+    "rotated_page": false,
+    "complex_layout": true,
+    "handwritten_content": false
+  },
+  "output_format_hint": "latex",
+  "_analysis": {
+    "input_type": "pdf",
+    "has_equations": true,
+    "complexity": "advanced",
+    "complexity_score": 64,
+    "technical_terms_found": [
+      "cosine",
+      "vector",
+      "sine"
+    ],
+    "equations_found": [
+      "x cosα + y cosβ + z cosγ = p\nPractice Problems (JEE Style)\n1\nFind the distance between points (1",
+      "d = √[(x2 − x1)² + (y2 − y1)² + (z2 − z1)²]",
+      "Ax + By + Cz + D = 0\nNormal Form",
+      "4) to plane x + 2y + 2z = 9",
+      "r = a + λb\nCartesian Form",
+      "z = 3 and x",
+      "n = cosγ\nl",
+      "x1)/l = (y",
+      "y1)/m = (z",
+      "y + 2z = 5",
+      "l = cosα",
+      "m = cosβ"
+    ],
+    "language": "en",
+    "secondary_intents": [],
+    "asks": [
+      "3D Geometry – Exam Ready Notes Distance Between Two Points 3D Geometry – Exam Ready Notes 1. Distance Between Two Points Given points P(x1, y1, z1) and Q(x2, y2, z2): d = √[(x2 − x1)² + (y2 − y1)² + (z2 − z1)²] 2. Direction Cosines If a line makes angles α, β, γ with x, y, z axes: l = cosα, m = cosβ, n = cosγ l² + m² + n² = 1 3. Equation of a Line Vector Form: r = a + λb Cartesian Form: (x − x1)/l = (y − y1)/m = (z − z1)/n 4. Equation of a Plane General Form: Ax + By + Cz + D = 0 Normal Form: x cosα + y cosβ + z cosγ = p Practice Problems (JEE Style) 1 Find the distance between points (1, 2, 3) and (4, −2, 5). 2 Find direction cosines of a line equally inclined to all axes. 3 Find equation of line passing through (1, 2, 3) with direction ratios (2, −1, 2). 4 Find angle between planes: 2x + y − z = 3 and x − y + 2z = 5. 5 Find shortest distance from point (2, −1, 4) to plane x + 2y + 2z = 9. Key Tip: Always normalize direction ratios when needed and remember dot product rules for angles"
+    ]
+  },
+  "_model": "deepseek-ai/deepseek-vl2",
+  "_api_backend": "replicate",
+  "_pages_processed": 2,
+  "_timing": {
+    "pdf_render_seconds": 1.028,
+    "model_name": "deepseek-ai/deepseek-vl2",
+    "model_loaded_now": false,
+    "model_load_seconds": 0.0,
+    "input_preparation_seconds": 0.599,
+    "generation_seconds": 22.341,
+    "decode_seconds": 0.0,
+    "model_call_seconds": 22.781,
+    "prediction_id": "fqj9brwvrnrna0cx61h8d8cb5m",
+    "prediction_status": "succeeded",
+    "image_bytes": 35524,
+    "image_width": 541,
+    "image_height": 1400,
+    "jpeg_quality": 80,
+    "total_parse_seconds": 25.338
+  },
+  "_uploaded_filename": "t2.pdf"
+}

@@ -1,0 +1,50 @@
+[
+    {
+        "name": "Scene 1: Introduce Problem",
+        "type": "default.normal",
+        "video": "visualization_0000_Scene 1: Introduce Problem.mp4",
+        "width": 854,
+        "height": 480,
+        "nb_frames": "55",
+        "duration": "3.666667",
+        "avg_frame_rate": "15/1",
+        "codec_name": "h264",
+        "pix_fmt": "yuv420p"
+    },
+    {
+        "name": "Scene 2: Perform Inverse Operation",
+        "type": "default.normal",
+        "video": "visualization_0001_Scene 2: Perform Inverse Operation.mp4",
+        "width": 854,
+        "height": 480,
+        "nb_frames": "64",
+        "duration": "4.266667",
+        "avg_frame_rate": "15/1",
+        "codec_name": "h264",
+        "pix_fmt": "yuv420p"
+    },
+    {
+        "name": "Scene 3: Simplify and Present Solution",
+        "type": "default.normal",
+        "video": "visualization_0002_Scene 3: Simplify and Present Solution.mp4",
+        "width": 854,
+        "height": 480,
+        "nb_frames": "38",
+        "duration": "2.533333",
+        "avg_frame_rate": "15/1",
+        "codec_name": "h264",
+        "pix_fmt": "yuv420p"
+    },
+    {
+        "name": "Scene 4: Verify the Solution",
+        "type": "default.normal",
+        "video": "visualization_0003_Scene 4: Verify the Solution.mp4",
+        "width": 854,
+        "height": 480,
+        "nb_frames": "95",
+        "duration": "6.333333",
+        "avg_frame_rate": "15/1",
+        "codec_name": "h264",
+        "pix_fmt": "yuv420p"
+    }
+]

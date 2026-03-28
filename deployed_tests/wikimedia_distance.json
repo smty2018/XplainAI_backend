@@ -1,0 +1,155 @@
+{
+  "intent": "ocr_extraction",
+  "secondary_intents": [
+    "comparison"
+  ],
+  "asks": [
+    "The distance between two points (x1, y1) and (x2, y2) is given by \\\\sqrt{(x_2 - x_1)^2 + (y_2 - y_1)^2}. The horizontal difference is x2 - x1, and the vertical difference is y2 - y1. distance between two points in coordinate geometry coordinates Cartesian plane distance formula"
+  ],
+  "topic": "distance between two points in coordinate geometry",
+  "domain": "mathematics",
+  "complexity": "basic",
+  "language": "english",
+  "key_concepts": [
+    "slope",
+    "change in y",
+    "change in x",
+    "distance between points",
+    "coordinates",
+    "Cartesian plane"
+  ],
+  "confidence": 0.48,
+  "field_confidence": {
+    "intent_confidence": 0.48,
+    "topic_confidence": 0.45,
+    "domain_confidence": 0.5,
+    "complexity_confidence": 0.47,
+    "language_confidence": 0.51,
+    "equation_confidence": 0.53,
+    "entity_confidence": 0.44,
+    "layout_confidence": 0.43,
+    "document_confidence": 0.45
+  },
+  "equations": [
+    {
+      "raw": "\\\\sqrt{(x_2 - x_1)^2 + (y_2 - y_1)^2}",
+      "latex": "\\\\sqrt{(x_2 - x_1)^2 + (y_2 - y_1)^2}",
+      "confidence": 0.53,
+      "bbox": null,
+      "page": 1
+    },
+    {
+      "raw": "y2 - y1",
+      "latex": "y_2 - y_1",
+      "confidence": 0.68,
+      "bbox": null,
+      "page": 1
+    },
+    {
+      "raw": "x2 - x1",
+      "latex": "x_2 - x_1",
+      "confidence": 0.68,
+      "bbox": null,
+      "page": 1
+    }
+  ],
+  "entities": {
+    "symbols": [],
+    "concepts": [
+      "distance between two points",
+      "distance between two points in coordinate geometry",
+      "coordinates",
+      "Cartesian plane",
+      "distance formula"
+    ],
+    "variables": [
+      "sqrt",
+      "x_2",
+      "x_1",
+      "y_2",
+      "y_1",
+      "y",
+      "x"
+    ],
+    "constants": [],
+    "units": [],
+    "names": [],
+    "dates": [],
+    "amounts": [],
+    "addresses": []
+  },
+  "key_value_pairs": [],
+  "layout_elements": [],
+  "tables": [],
+  "figures": [],
+  "grounding": [],
+  "reading_order": [],
+  "source_spans": [],
+  "verification_targets": {
+    "sympy": false,
+    "unit_check": false,
+    "constraint_check": false,
+    "edge_case_check": false
+  },
+  "retrieval_targets": {
+    "similar_problems": false,
+    "misconceptions": false,
+    "visualization_patterns": false,
+    "explanation_style": false
+  },
+  "document_metadata": {
+    "title": "",
+    "authors": [],
+    "references": [],
+    "page_count": 1,
+    "detected_language": "en",
+    "is_scanned": true,
+    "has_text_layer": false
+  },
+  "quality_flags": {
+    "has_equations": true,
+    "ocr_used": true,
+    "low_confidence_regions": [],
+    "garbled_text_detected": false,
+    "rotated_page": false,
+    "complex_layout": false,
+    "handwritten_content": false
+  },
+  "output_format_hint": "latex",
+  "_analysis": {
+    "input_type": "image",
+    "has_equations": false,
+    "complexity": "intermediate",
+    "complexity_score": 26,
+    "technical_terms_found": [],
+    "equations_found": [],
+    "language": "en",
+    "secondary_intents": [
+      "comparison"
+    ],
+    "asks": [
+      "The distance between two points (x1, y1) and (x2, y2) is given by \\\\sqrt{(x_2 - x_1)^2 + (y_2 - y_1)^2}. The horizontal difference is x2 - x1, and the vertical difference is y2 - y1. distance between two points in coordinate geometry coordinates Cartesian plane distance formula"
+    ]
+  },
+  "_model": "deepseek-ai/deepseek-vl2",
+  "_api_backend": "replicate",
+  "_timing": {
+    "model_name": "deepseek-ai/deepseek-vl2",
+    "model_loaded_now": false,
+    "model_load_seconds": 0.0,
+    "input_preparation_seconds": 0.005,
+    "generation_seconds": 17.638,
+    "decode_seconds": 0.0,
+    "model_call_seconds": 18.296,
+    "prediction_id": "k4b9241chdrna0cx61j9bjrw4g",
+    "prediction_status": "succeeded",
+    "image_bytes": 64855,
+    "image_width": 960,
+    "image_height": 769,
+    "jpeg_quality": 80,
+    "detail_pass_seconds": 20.887,
+    "detail_pass_applied": true,
+    "total_parse_seconds": 39.19
+  },
+  "_uploaded_filename": "wikimedia_distance.png"
+}
