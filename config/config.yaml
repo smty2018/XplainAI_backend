@@ -29,6 +29,15 @@ manim_code_max_tokens: 8192
 manim_layout_refiner_model: "deepseek-reasoner"
 manim_layout_refiner_max_tokens: 8192
 prompt_assets_dir: "./prompt_assets"
+manim_rag_enabled: true
+manim_rag_seed_dir: "./data/manim_kb"
+manim_rag_persist_dir: "./cache/chroma_manim_kb"
+manim_rag_collection_name: "manim_knowledge"
+manim_rag_chunk_chars: 1200
+manim_rag_chunk_overlap: 180
+manim_rag_embedding_dimension: 384
+manim_rag_top_k_scene_planner: 4
+manim_rag_top_k_manim_code: 4
 use_gpu: false
 max_pages: 3
 

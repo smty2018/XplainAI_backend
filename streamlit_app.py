@@ -105,10 +105,10 @@ def detect_scene_classes(code: str) -> List[str]:
     try:
         tree = ast.parse(code)
     except SyntaxError:
-        pattern = re.compile(r"^class\s+(\w+)\(([^)]*Scene[^)]*)\)\s*:", flags=re.MULTILINE)
+        pattern = re.compile(r"^class\s+(\w+)\(([^)]*)\)\s*:", flags=re.MULTILINE)
         return [match.group(1) for match in pattern.finditer(code)]
 
-    classes: List[tuple[str, bool]] = []
+    class_info: Dict[str, Dict[str, Any]] = {}
     for node in tree.body:
         if not isinstance(node, ast.ClassDef):
             continue
@@ -119,20 +119,76 @@ def detect_scene_classes(code: str) -> List[str]:
             elif isinstance(base, ast.Attribute):
                 base_names.append(base.attr)
 
-        if not any(name.endswith("Scene") for name in base_names):
-            continue
-
         has_construct = any(
             isinstance(item, ast.FunctionDef) and item.name == "construct"
             for item in node.body
         )
-        classes.append((node.name, has_construct))
+        class_info[node.name] = {
+            "bases": base_names,
+            "has_construct": has_construct,
+        }
 
-    if not classes:
+    if not class_info:
         return []
 
-    concrete = [name for name, has_construct in classes if has_construct]
-    return concrete or [name for name, _ in classes]
+    scene_cache: Dict[str, bool] = {}
+
+    def is_scene_subclass(name: str, stack: Optional[set[str]] = None) -> bool:
+        if name in scene_cache:
+            return scene_cache[name]
+        info = class_info.get(name)
+        if info is None:
+            scene_cache[name] = False
+            return False
+
+        stack = stack or set()
+        if name in stack:
+            scene_cache[name] = False
+            return False
+
+        stack = set(stack)
+        stack.add(name)
+        bases = info.get("bases", [])
+        result = False
+        for base_name in bases:
+            if str(base_name).endswith("Scene"):
+                result = True
+                break
+            if base_name in class_info and is_scene_subclass(base_name, stack):
+                result = True
+                break
+        scene_cache[name] = result
+        return result
+
+    scene_class_names = [name for name in class_info if is_scene_subclass(name)]
+    if not scene_class_names:
+        return []
+
+    inherited_by_other = {
+        base_name
+        for info in class_info.values()
+        for base_name in info.get("bases", [])
+        if base_name in scene_class_names
+    }
+
+    def helper_penalty(name: str) -> int:
+        lowered = name.lower()
+        penalties = 0
+        if "base" in lowered:
+            penalties += 3
+        if "helper" in lowered:
+            penalties += 2
+        if "layout" in lowered:
+            penalties += 1
+        return penalties
+
+    concrete = [name for name in scene_class_names if class_info[name]["has_construct"]]
+    if concrete:
+        leaf_concrete = [name for name in concrete if name not in inherited_by_other]
+        ranked = leaf_concrete or concrete
+        return sorted(ranked, key=lambda name: (helper_penalty(name), name))
+
+    return sorted(scene_class_names, key=lambda name: (helper_penalty(name), name))
 
 
 def compile_python_script(script_path: Path) -> None:
@@ -1266,14 +1322,15 @@ def main() -> None:
         saved_files = (result.get("pipeline_metadata") or {}).get("saved_files", {})
 
         timings = result.get("pipeline_metadata", {})
-        metrics = st.columns(5)
+        metrics = st.columns(6)
         metrics[0].metric("Parse", f"{(timings.get('parse_timing') or {}).get('total_parse_seconds', 0):.2f}s")
         metrics[1].metric("Reason", f"{(timings.get('reasoning_timing') or {}).get('generation_seconds', 0):.2f}s")
-        metrics[2].metric("Planner", f"{(timings.get('scene_planner_timing') or {}).get('generation_seconds', 0):.2f}s")
-        metrics[3].metric("Code", f"{(timings.get('manim_code_timing') or {}).get('generation_seconds', 0):.2f}s")
-        metrics[4].metric("Total", f"{timings.get('total_pipeline_seconds', 0):.2f}s")
+        metrics[2].metric("Verify", f"{(timings.get('verification_timing') or {}).get('verification_seconds', 0):.2f}s")
+        metrics[3].metric("Planner", f"{(timings.get('scene_planner_timing') or {}).get('generation_seconds', 0):.2f}s")
+        metrics[4].metric("Code", f"{(timings.get('manim_code_timing') or {}).get('generation_seconds', 0):.2f}s")
+        metrics[5].metric("Total", f"{timings.get('total_pipeline_seconds', 0):.2f}s")
 
-        tabs = st.tabs(["Visualization", "Parsed JSON", "Solution", "Scene Planner", "Manim Code", "Artifacts"])
+        tabs = st.tabs(["Visualization", "Parsed JSON", "Solution", "Verification", "RAG", "Scene Planner", "Manim Code", "Artifacts"])
 
         with tabs[0]:
             st.subheader("Visualization")
@@ -1315,10 +1372,44 @@ def main() -> None:
             st.markdown(solution.get("full_text", "_No solution text generated._"))
 
         with tabs[3]:
+            st.subheader("Verification")
+            verification = result.get("verification", {}) or {}
+            verification_status = str(verification.get("status", "unknown")).lower()
+            verification_summary = str(verification.get("summary", "")).strip()
+
+            if verification_status == "pass":
+                st.success(verification_summary or "Verification passed.")
+            elif verification_status == "fail":
+                st.error(verification_summary or "Verification failed.")
+            elif verification_status == "warn":
+                st.warning(verification_summary or "Verification completed with warnings.")
+            else:
+                st.info(verification_summary or "Verification status is unavailable.")
+
+            if verification.get("warnings"):
+                st.caption("Warnings")
+                for warning in verification.get("warnings", []):
+                    st.write(f"- {warning}")
+
+            st.json(verification)
+
+        with tabs[4]:
+            st.subheader("RAG")
+            rag_payload = result.get("rag", {}) or {}
+            kb_status = (rag_payload.get("knowledge_base") or {}) if isinstance(rag_payload, dict) else {}
+            if kb_status.get("enabled"):
+                st.success(
+                    f"Chroma knowledge base ready with {kb_status.get('chunk_count', 0)} chunks from {kb_status.get('document_count', 0)} source files."
+                )
+            else:
+                st.info("Chroma knowledge base is currently disabled or unavailable.")
+            st.json(rag_payload)
+
+        with tabs[5]:
             st.subheader("Scene Planner")
             st.text((result.get("scene_planner") or {}).get("text", ""))
 
-        with tabs[4]:
+        with tabs[6]:
             original_code = str((output["pipeline_result"].get("manim_code") or {}).get("text", ""))
             if original_code.strip() and not str(st.session_state.get("xplainai_code_editor", "")).strip():
                 st.session_state["xplainai_code_editor"] = original_code
@@ -1419,7 +1510,7 @@ def main() -> None:
             else:
                 st.code(st.session_state.get("xplainai_code_editor", ""), language="python")
 
-        with tabs[5]:
+        with tabs[7]:
             st.subheader("Downloads")
             render_saved_artifact_buttons(saved_files, render_result)
             current_code_path = Path(output["current_code_path"])

@@ -84,3 +84,5 @@ Then open the local URL shown by Streamlit, usually:
 - For `Replicate API` parsing, make sure your Replicate token is in `.env`.
 - For reasoning, make sure your DeepSeek API key is in `.env`.
 - Video rendering uses your local Manim installation, so the first render can take a while.
+- The verified-solution -> Scene Planner -> Manim code path now uses a local Chroma knowledge base seeded from `prompt_assets/` and `data/manim_kb/`.
+- If you add more Manim docs/examples under `data/manim_kb/`, the Chroma index will pick them up automatically on the next run.

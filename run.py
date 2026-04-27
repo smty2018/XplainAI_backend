@@ -141,6 +141,16 @@ def main():
         print(json.dumps(result.get("solution", {}), indent=2, ensure_ascii=False))
 
         print("\n" + "=" * 50)
+        print("VERIFICATION OUTPUT:")
+        print("=" * 50)
+        print(json.dumps(result.get("verification", {}), indent=2, ensure_ascii=False))
+
+        print("\n" + "=" * 50)
+        print("RAG OUTPUT:")
+        print("=" * 50)
+        print(json.dumps(result.get("rag", {}), indent=2, ensure_ascii=False))
+
+        print("\n" + "=" * 50)
         print("PIPELINE METADATA:")
         print("=" * 50)
         print(json.dumps(result.get("pipeline_metadata", {}), indent=2, ensure_ascii=False))

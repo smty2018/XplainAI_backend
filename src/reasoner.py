@@ -18,7 +18,9 @@ import yaml
 from dotenv import load_dotenv
 from PIL import Image
 
+from .manim_rag import ManimKnowledgeBase
 from .parser import LocalParser
+from .verification import VerificationEngine
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +61,7 @@ class MathematicalReasoner:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.prompt_assets_dir.mkdir(parents=True, exist_ok=True)
+        self.manim_kb = ManimKnowledgeBase(self.project_root, self.config)
         self.solution_templates = self._load_templates()
 
     def _load_config(self, config_path: str) -> Dict[str, Any]:
@@ -112,6 +115,15 @@ class MathematicalReasoner:
                 "You are a visualization-focused tutor.\nEmphasize intuition, geometry, and plots.\n\n"
                 "Concept: {concept}\nEquations: {equations}\nParameters: {parameters}\n"
                 "Context: {context}\nRequested Tasks: {asks}"
+            ),
+            "solution_repair": (
+                "You previously produced a mathematical or engineering solution that failed independent verification.\n"
+                "Correct only the mathematics that is inconsistent with the verification report while keeping the explanation clear.\n\n"
+                "Problem: {problem}\nContext: {context}\nEquations: {equations}\n"
+                "Key Concepts: {concepts}\nDomain: {domain}\nComplexity: {complexity}\n"
+                "Requested Tasks: {asks}\nVerification Targets: {verification_targets}\n"
+                "Previous Solution Markdown:\n{previous_solution}\n\n"
+                "Independent Verification Report:\n{verification_report}"
             ),
             "scene_planner": (
                 "Create a second-pass Scene Planner prompt for a downstream Manim Community Edition code generator.\n"
@@ -167,6 +179,25 @@ class MathematicalReasoner:
             ),
         }
 
+    def _solution_markdown_contract(self) -> str:
+        return "\n".join(
+            [
+                "Output requirements:",
+                "- Use Markdown.",
+                "- Use these exact top-level headers in order:",
+                "  ## Understanding",
+                "  ## Prerequisites",
+                "  ## Step-by-Step Solution",
+                "  ## Key Insights",
+                "  ## Final Answer",
+                "  ## Verification",
+                "  ## Extensions",
+                "- In '## Step-by-Step Solution', include numbered steps.",
+                "- Use LaTeX with $$...$$ for important equations.",
+                "- If the request includes implications, address them explicitly.",
+            ]
+        )
+
     def _read_prompt_asset(self, name: str) -> str:
         path = self.prompt_assets_dir / name
         if not path.exists():
@@ -212,24 +243,37 @@ class MathematicalReasoner:
             concept=parsed_input.get("topic", "the concept"),
             parameters=self._extract_parameters(parsed_input),
         )
-        contract = "\n".join(
+        return f"{prompt}\n\n{self._solution_markdown_contract()}"
+
+    def prepare_repair_prompt(
+        self,
+        parsed_input: Dict[str, Any],
+        previous_solution: Dict[str, Any],
+        verification_report: Dict[str, Any],
+    ) -> str:
+        template = self.solution_templates["solution_repair"]
+        prompt = template.format(
+            problem=self._extract_problem_statement(parsed_input),
+            context=self._build_context(parsed_input),
+            equations=self._format_equations(parsed_input.get("equations", [])),
+            concepts=", ".join(parsed_input.get("key_concepts", [])[:6]) or "None",
+            domain=parsed_input.get("domain", "general"),
+            complexity=parsed_input.get("complexity", "intermediate"),
+            asks="; ".join(parsed_input.get("asks", [])) or "None",
+            verification_targets=self._format_targets(parsed_input.get("verification_targets", {})),
+            previous_solution=previous_solution.get("full_text", "") or "No previous solution text available.",
+            verification_report=json.dumps(verification_report, indent=2, ensure_ascii=False),
+        )
+        repair_rules = "\n".join(
             [
-                "Output requirements:",
-                "- Use Markdown.",
-                "- Use these exact top-level headers in order:",
-                "  ## Understanding",
-                "  ## Prerequisites",
-                "  ## Step-by-Step Solution",
-                "  ## Key Insights",
-                "  ## Final Answer",
-                "  ## Verification",
-                "  ## Extensions",
-                "- In '## Step-by-Step Solution', include numbered steps.",
-                "- Use LaTeX with $$...$$ for important equations.",
-                "- If the request includes implications, address them explicitly.",
+                "Repair requirements:",
+                "- Keep the original pedagogical structure whenever it is still valid.",
+                "- Fix any incorrect equations, transformations, or final numeric values.",
+                "- If the independent verifier says the final answer mismatched symbolic solving, align the final answer with the symbolic result.",
+                "- Do not mention internal tooling or hidden chain-of-thought.",
             ]
         )
-        return f"{prompt}\n\n{contract}"
+        return f"{prompt}\n\n{repair_rules}\n\n{self._solution_markdown_contract()}"
 
     def _extract_problem_statement(self, parsed_input: Dict[str, Any]) -> str:
         source = str(parsed_input.get("_source_text", "")).strip()
@@ -468,6 +512,49 @@ class MathematicalReasoner:
         solution["_prompt"] = prompt
         return solution
 
+    def revise_solution(
+        self,
+        parsed_input: Dict[str, Any],
+        previous_solution: Dict[str, Any],
+        verification_report: Dict[str, Any],
+        include_reasoning_trace: bool = False,
+    ) -> Dict[str, Any]:
+        total_start = perf_counter()
+        prompt = self.prepare_repair_prompt(parsed_input, previous_solution, verification_report)
+        text, reasoning_content, timing = self._generate_text(prompt)
+        revised = self._structure_solution(text, self.determine_solution_style(parsed_input))
+        if include_reasoning_trace:
+            revised = self.enhance_with_reasoning_trace(revised, reasoning_content=reasoning_content)
+        revised["_metadata"] = {
+            "style": revised.get("solution_style", self.determine_solution_style(parsed_input).value),
+            "model": self.model_name,
+            "timestamp": datetime.now().isoformat(),
+            "prompt_length_chars": len(prompt),
+            "generation_time": timing["generation_seconds"],
+            "total_time": round(perf_counter() - total_start, 3),
+            "revision_of_timestamp": previous_solution.get("_metadata", {}).get("timestamp"),
+            "repair_pass": True,
+            "_timing": timing,
+        }
+        revised["_prompt"] = prompt
+        return revised
+
+    def attach_verification_summary(
+        self,
+        solution: Dict[str, Any],
+        verification_report: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        updated = dict(solution)
+        original_verification = str(solution.get("verification", "") or "").strip()
+        if original_verification:
+            updated["llm_verification"] = original_verification
+        updated["verification"] = str(verification_report.get("summary", "") or "").strip()
+        metadata = dict(updated.get("_metadata", {}))
+        metadata["verification_status"] = verification_report.get("status", "unknown")
+        metadata["verification_summary"] = verification_report.get("summary", "")
+        updated["_metadata"] = metadata
+        return updated
+
     def _build_solution_markdown(self, parsed_input: Dict[str, Any], solution: Dict[str, Any]) -> str:
         markdown = [
             "# XplainAI Reasoning",
@@ -555,7 +642,12 @@ class MathematicalReasoner:
                 parts.append(f"Step {number}: {title}.")
         return "\n".join(parts) if parts else "No structured steps available."
 
-    def prepare_scene_planner_prompt(self, parsed_input: Dict[str, Any], solution: Dict[str, Any]) -> str:
+    def prepare_scene_planner_prompt(
+        self,
+        parsed_input: Dict[str, Any],
+        solution: Dict[str, Any],
+        retrieval_context: Optional[Dict[str, Any]] = None,
+    ) -> str:
         template = self.solution_templates["scene_planner"]
         reasoning_markdown = self._build_solution_markdown(parsed_input, solution)
         prompt = template.format(
@@ -579,6 +671,10 @@ class MathematicalReasoner:
                 self._read_prompt_asset("scene_planner_template.md") or "Not available."
             ),
             reasoning_markdown=reasoning_markdown,
+        )
+        rag_block = self.manim_kb.format_for_prompt(
+            retrieval_context,
+            "Retrieved Manim Knowledge Base Snippets:",
         )
         contract = "\n".join(
             [
@@ -608,7 +704,7 @@ class MathematicalReasoner:
                 "- Return plain text only, not JSON and not fenced code blocks.",
             ]
         )
-        return f"{prompt}\n\n{contract}"
+        return f"{prompt}\n\n{rag_block}\n\n{contract}"
 
     def generate_scene_planner(
         self,
@@ -616,7 +712,8 @@ class MathematicalReasoner:
         solution: Dict[str, Any],
     ) -> Dict[str, Any]:
         total_start = perf_counter()
-        prompt = self.prepare_scene_planner_prompt(parsed_input, solution)
+        rag_context = self.manim_kb.retrieve_for_scene_planner(parsed_input, solution)
+        prompt = self.prepare_scene_planner_prompt(parsed_input, solution, rag_context)
         text, reasoning_content, timing = self._generate_text(
             prompt,
             system_prompt=(
@@ -638,6 +735,7 @@ class MathematicalReasoner:
                 "reasoning_signal_present": bool(reasoning_content),
             },
             "_prompt": prompt,
+            "_rag": rag_context,
         }
 
     def prepare_manim_code_prompt(
@@ -645,6 +743,7 @@ class MathematicalReasoner:
         parsed_input: Dict[str, Any],
         solution: Dict[str, Any],
         scene_planner: Dict[str, Any],
+        retrieval_context: Optional[Dict[str, Any]] = None,
     ) -> str:
         template = self.solution_templates["manim_code_generator"]
         reasoning_markdown = self._build_solution_markdown(parsed_input, solution)
@@ -664,6 +763,10 @@ class MathematicalReasoner:
             few_shot_reference=self._read_prompt_asset("manim_few_shot_example.py") or "Not available.",
             layout_guidance=self._read_prompt_asset("manim_layout_guidance.md") or "Not available.",
             no_overlap_guidance=self._read_prompt_asset("manim_no_overlap_rules.md") or "Not available.",
+        )
+        rag_block = self.manim_kb.format_for_prompt(
+            retrieval_context,
+            "Retrieved Manim Knowledge Base Snippets:",
         )
         contract = "\n".join(
             [
@@ -705,16 +808,17 @@ class MathematicalReasoner:
                 "- Keep the code modular, readable, and directly runnable.",
             ]
         )
-        return f"{prompt}\n\n{contract}"
+        return f"{prompt}\n\n{rag_block}\n\n{contract}"
 
     def prepare_manim_layout_refiner_prompt(
         self,
         parsed_input: Dict[str, Any],
         scene_planner: Dict[str, Any],
         generated_code: str,
+        retrieval_context: Optional[Dict[str, Any]] = None,
     ) -> str:
         template = self.solution_templates["manim_layout_refiner"]
-        return template.format(
+        prompt = template.format(
             topic=parsed_input.get("topic", "the concept"),
             scene_planner=str(scene_planner.get("text") or "").strip(),
             scene_planner_template=self._read_prompt_asset("scene_planner_template.md") or "Not available.",
@@ -723,15 +827,26 @@ class MathematicalReasoner:
             no_overlap_guidance=self._read_prompt_asset("manim_no_overlap_rules.md") or "Not available.",
             generated_code=generated_code,
         )
+        rag_block = self.manim_kb.format_for_prompt(
+            retrieval_context,
+            "Retrieved Manim Knowledge Base Snippets:",
+        )
+        return f"{prompt}\n\n{rag_block}"
 
     def refine_manim_code_layout(
         self,
         parsed_input: Dict[str, Any],
         scene_planner: Dict[str, Any],
         generated_code: str,
+        retrieval_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         total_start = perf_counter()
-        prompt = self.prepare_manim_layout_refiner_prompt(parsed_input, scene_planner, generated_code)
+        prompt = self.prepare_manim_layout_refiner_prompt(
+            parsed_input,
+            scene_planner,
+            generated_code,
+            retrieval_context=retrieval_context,
+        )
         text, reasoning_content, timing = self._generate_text(
             prompt,
             system_prompt=(
@@ -758,6 +873,7 @@ class MathematicalReasoner:
                 "reasoning_signal_present": bool(reasoning_content),
             },
             "_prompt": prompt,
+            "_rag": retrieval_context or {},
         }
 
     def generate_manim_code(
@@ -767,7 +883,8 @@ class MathematicalReasoner:
         scene_planner: Dict[str, Any],
     ) -> Dict[str, Any]:
         total_start = perf_counter()
-        prompt = self.prepare_manim_code_prompt(parsed_input, solution, scene_planner)
+        rag_context = self.manim_kb.retrieve_for_manim_code(parsed_input, solution, scene_planner)
+        prompt = self.prepare_manim_code_prompt(parsed_input, solution, scene_planner, rag_context)
         text, reasoning_content, timing = self._generate_text(
             prompt,
             system_prompt=(
@@ -783,7 +900,12 @@ class MathematicalReasoner:
         code = self._clean_code_response(text)
         refined = None
         if self._manim_code_has_overlap_risk(code):
-            refined = self.refine_manim_code_layout(parsed_input, scene_planner, code)
+            refined = self.refine_manim_code_layout(
+                parsed_input,
+                scene_planner,
+                code,
+                retrieval_context=rag_context,
+            )
             code = self._clean_code_response((refined or {}).get("text", code))
         return {
             "text": code,
@@ -800,6 +922,7 @@ class MathematicalReasoner:
             },
             "_prompt": prompt,
             "_layout_refiner": refined,
+            "_rag": rag_context,
         }
 
     def _structure_solution(self, text: str, style: SolutionStyle) -> Dict[str, Any]:
@@ -931,6 +1054,7 @@ class SolutionOrchestrator:
     def __init__(self, config_path: str = "config/config.yaml"):
         self.parser = LocalParser(config_path)
         self.reasoner = MathematicalReasoner(config_path)
+        self.verifier = VerificationEngine()
         self.cache_enabled = bool(self.reasoner.config.get("enable_cache", True))
         self.cache_dir = self.reasoner.cache_dir
 
@@ -982,6 +1106,44 @@ class SolutionOrchestrator:
         )
         solution = self.reasoner.generate_solution(parsed, include_reasoning_trace=include_reasoning_trace)
         self._emit_progress(progress_callback, "reason", "Reasoning step complete.")
+        self._emit_progress(progress_callback, "verification", "Running post-solution verification checks...")
+        verification = self.verifier.run(parsed, solution)
+        revision_attempted = False
+        revision_solution = None
+        revision_verification = None
+        if verification.get("status") == "fail":
+            revision_attempted = True
+            self._emit_progress(
+                progress_callback,
+                "verification",
+                "Verification found a mismatch. Requesting one repair pass from the reasoning model...",
+            )
+            revision_solution = self.reasoner.revise_solution(
+                parsed,
+                solution,
+                verification,
+                include_reasoning_trace=include_reasoning_trace,
+            )
+            revision_verification = self.verifier.run(parsed, revision_solution)
+            if revision_verification.get("status") in {"pass", "warn"}:
+                solution = revision_solution
+                verification = revision_verification
+                self._emit_progress(
+                    progress_callback,
+                    "verification",
+                    "Repair pass complete. Continuing with the revised solution.",
+                )
+            else:
+                solution = revision_solution
+                verification = revision_verification
+                self._emit_progress(
+                    progress_callback,
+                    "verification",
+                    "Repair pass still left verification warnings or failures. Continuing with a flagged solution.",
+                )
+        else:
+            self._emit_progress(progress_callback, "verification", "Verification step complete.")
+        solution = self.reasoner.attach_verification_summary(solution, verification)
         if generate_scene_planner or generate_manim_code:
             self._emit_progress(
                 progress_callback,
@@ -1008,9 +1170,16 @@ class SolutionOrchestrator:
             self._emit_progress(progress_callback, "manim_code", "Manim code generation complete.")
         else:
             manim_code = None
+        rag_payload = {
+            "knowledge_base": self.reasoner.manim_kb.get_status(),
+            "scene_planner": (scene_planner or {}).get("_rag", {}) if isinstance(scene_planner, dict) else {},
+            "manim_code": (manim_code or {}).get("_rag", {}) if isinstance(manim_code, dict) else {},
+        }
         result = {
             "parsed_input": parsed,
             "solution": solution,
+            "verification": verification,
+            "rag": rag_payload,
             "pipeline_metadata": {
                 "parser_model": parsed.get("_model"),
                 "reasoner_model": self.reasoner.model_name,
@@ -1018,6 +1187,14 @@ class SolutionOrchestrator:
                 "manim_code_model": self.reasoner.manim_code_model if manim_code else None,
                 "parse_timing": parsed.get("_timing", {}),
                 "reasoning_timing": solution.get("_metadata", {}).get("_timing", {}),
+                "verification_timing": verification.get("_timing", {}) if isinstance(verification, dict) else {},
+                "verification_status": verification.get("status") if isinstance(verification, dict) else None,
+                "revision_attempted": revision_attempted,
+                "revision_timing": (
+                    revision_solution.get("_metadata", {}).get("_timing", {})
+                    if isinstance(revision_solution, dict)
+                    else {}
+                ),
                 "scene_planner_timing": (
                     scene_planner.get("_metadata", {}).get("_timing", {})
                     if isinstance(scene_planner, dict)
@@ -1028,6 +1205,9 @@ class SolutionOrchestrator:
                     if isinstance(manim_code, dict)
                     else {}
                 ),
+                "verification_passed": verification.get("status") == "pass" if isinstance(verification, dict) else False,
+                "rag_enabled": bool(rag_payload.get("knowledge_base", {}).get("enabled")),
+                "rag_chunk_count": int(rag_payload.get("knowledge_base", {}).get("chunk_count", 0) or 0),
                 "total_pipeline_seconds": round(perf_counter() - start, 3),
             },
         }
@@ -1139,6 +1319,7 @@ class SolutionOrchestrator:
                         max(int(self.reasoner.config.get("reasoning_max_new_tokens", 2048)), 8192),
                     )
                 ),
+                "verification_engine_version": self.verifier.VERSION,
                 "scene_planner_max_tokens": int(
                     self.reasoner.config.get("scene_planner_max_tokens", 4096)
                 ),
