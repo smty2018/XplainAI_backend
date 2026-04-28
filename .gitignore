@@ -18,3 +18,6 @@ DeepSeek-VL2/deepseek_vl2.egg-info/
 
 # Preserve vendored source while keeping the original nested git metadata local-only
 DeepSeek-VL2/.git.backup/
+
+# Local temporary debug and render scratch artifacts
+tmp_*
