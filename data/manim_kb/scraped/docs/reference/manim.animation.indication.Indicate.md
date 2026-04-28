@@ -1,0 +1,13 @@
+# Indicate ¶
+
+Source: https://docs.manim.community/en/stable/reference/manim.animation.indication.Indicate.html
+
+# Indicate ¶
+
+Qualified name: manim.animation.indication.Indicate
+
+class Indicate ( mobject = None , * args , use_override = True , ** kwargs ) [source] ¶ Bases: Transform Indicate a Mobject by temporarily resizing and recoloring it. Parameters : mobject ( Mobject ) – The mobject to indicate. scale_factor ( float ) – The factor by which the mobject will be temporally scaled color ( ParsableManimColor ) – The color the mobject temporally takes. rate_func ( RateFunction ) – The function defining the animation progress at every point in time. kwargs ( Any ) – Additional arguments to be passed to the Succession constructor Examples Example: UsingIndicate ¶ from manim import * class UsingIndicate ( Scene ): def construct ( self ): tex = Tex ( "Indicate" ) . scale ( 3 ) self . play ( Indicate ( tex )) self . wait () class UsingIndicate(Scene):
+    def construct(self):
+        tex = Tex("Indicate").scale(3)
+        self.play(Indicate(tex))
+        self.wait() Methods create_target Attributes path_arc path_func run_time _original__init__ ( mobject , scale_factor = 1.2 , color = ManimColor('#FFFF00') , rate_func = <function there_and_back> , **kwargs ) ¶ Initialize self.  See help(type(self)) for accurate signature. Parameters : mobject ( Mobject ) scale_factor ( float ) color ( ParsableManimColor ) rate_func ( RateFunction ) kwargs ( Any )

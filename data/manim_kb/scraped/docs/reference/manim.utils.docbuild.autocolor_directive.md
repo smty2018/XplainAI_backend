@@ -1,0 +1,15 @@
+# autocolor_directive ¶
+
+Source: https://docs.manim.community/en/stable/reference/manim.utils.docbuild.autocolor_directive.html
+
+# autocolor_directive ¶
+
+A directive for documenting colors in Manim.
+
+Classes
+
+ManimColorModuleDocumenter
+
+Functions
+
+setup ( app ) [source] ¶ Parameters : app ( Sphinx ) Return type : None

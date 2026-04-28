@@ -1,0 +1,15 @@
+# testing ¶
+
+Source: https://docs.manim.community/en/stable/reference/manim.utils.testing.html
+
+# testing ¶
+
+Utilities for Manim tests using pytest .
+
+For more information about Manim testing, see:
+
+- Manim Development Process , specifically the Tests bullet
+point under Polishing Changes and Submitting a Pull Request
+- Adding Tests
+
+_frames_testers | _show_diff | _test_class_makers

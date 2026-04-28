@@ -1,0 +1,11 @@
+# movement ¶
+
+Source: https://docs.manim.community/en/stable/reference/manim.animation.movement.html
+
+# movement ¶
+
+Animations related to movement.
+
+Classes
+
+ComplexHomotopy | Complex Homotopy a function Cx[0, 1] to C | Homotopy | A Homotopy. | MoveAlongPath | Make one mobject move along the path of another mobject. | PhaseFlow | SmoothedVectorizedHomotopy

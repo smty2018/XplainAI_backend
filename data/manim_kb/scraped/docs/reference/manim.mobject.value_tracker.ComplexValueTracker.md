@@ -1,0 +1,24 @@
+# ComplexValueTracker ¶
+
+Source: https://docs.manim.community/en/stable/reference/manim.mobject.value_tracker.ComplexValueTracker.html
+
+# ComplexValueTracker ¶
+
+Qualified name: manim.mobject.value\_tracker.ComplexValueTracker
+
+class ComplexValueTracker ( value = 0 , ** kwargs ) [source] ¶ Bases: ValueTracker Tracks a complex-valued parameter. The value is internally stored as a points array [a, b, 0]. This can be accessed directly
+to represent the value geometrically, see the usage example.
+When the value is set through animate , the value will take a straight path from the
+source point to the destination point. Examples Example: ComplexValueTrackerExample ¶ from manim import * class ComplexValueTrackerExample ( Scene ): def construct ( self ): tracker = ComplexValueTracker ( - 2 + 1 j ) dot = Dot () . add_updater ( lambda x : x . move_to ( tracker . points ) ) self . add ( NumberPlane (), dot ) self . play ( tracker . animate . set_value ( 3 + 2 j )) self . play ( tracker . animate . set_value ( tracker . get_value () * 1 j )) self . play ( tracker . animate . set_value ( tracker . get_value () - 2 j )) self . play ( tracker . animate . set_value ( tracker . get_value () / ( - 2 + 3 j ))) class ComplexValueTrackerExample(Scene):
+    def construct(self):
+        tracker = ComplexValueTracker(-2+1j)
+        dot = Dot().add_updater(
+            lambda x: x.move_to(tracker.points)
+        )
+
+        self.add(NumberPlane(), dot)
+
+        self.play(tracker.animate.set_value(3+2j))
+        self.play(tracker.animate.set_value(tracker.get_value() * 1j))
+        self.play(tracker.animate.set_value(tracker.get_value() - 2j))
+        self.play(tracker.animate.set_value(tracker.get_value() / (-2 + 3j))) Methods get_value Get the current value of this ComplexValueTracker as a complex number. set_value Sets a new complex value to the ComplexValueTracker. Attributes always Call a method on a mobject every frame. animate Used to animate the application of any method of self . animation_overrides depth The depth of the mobject. height The height of the mobject. width The width of the mobject. Parameters : value ( float ) kwargs ( Any ) _original__init__ ( value = 0 , ** kwargs ) ¶ Initialize self.  See help(type(self)) for accurate signature. Parameters : value ( float ) kwargs ( Any ) Return type : None get_value ( ) [source] ¶ Get the current value of this ComplexValueTracker as a complex number. Return type : complex set_value ( value ) [source] ¶ Sets a new complex value to the ComplexValueTracker. Parameters : value ( complex | float ) Return type : Self

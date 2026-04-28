@@ -1,0 +1,11 @@
+# update ¶
+
+Source: https://docs.manim.community/en/stable/reference/manim.animation.updaters.update.html
+
+# update ¶
+
+Animations that update mobjects.
+
+Classes
+
+MaintainPositionRelativeTo | UpdateFromAlphaFunc | UpdateFromFunc | update_function of the form func(mobject), presumably to be used when the state of one mobject is dependent on another simultaneously animated mobject

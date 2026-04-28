@@ -1,0 +1,11 @@
+# vectorized_mobject ¶
+
+Source: https://docs.manim.community/en/stable/reference/manim.mobject.types.vectorized_mobject.html
+
+# vectorized_mobject ¶
+
+Mobjects that use vector graphics.
+
+Classes
+
+CurvesAsSubmobjects | Convert a curve's elements to submobjects. | DashedVMobject | A | VMobject | composed of dashes instead of lines. | VDict | A VGroup-like class, also offering submobject access by key, like a python dict | VGroup | A group of vectorized mobjects. | VMobject | A vectorized mobject. | VectorizedPoint

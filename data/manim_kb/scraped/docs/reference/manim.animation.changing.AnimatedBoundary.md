@@ -1,0 +1,15 @@
+# AnimatedBoundary ¶
+
+Source: https://docs.manim.community/en/stable/reference/manim.animation.changing.AnimatedBoundary.html
+
+# AnimatedBoundary ¶
+
+Qualified name: manim.animation.changing.AnimatedBoundary
+
+class AnimatedBoundary ( vmobject, colors=[ManimColor('#29ABCA'), ManimColor('#9CDCEB'), ManimColor('#236B8E'), ManimColor('#736357')], max_stroke_width=3, cycle_rate=0.5, back_and_forth=True, draw_rate_func=<function smooth>, fade_rate_func=<function smooth>, **kwargs ) [source] ¶ Bases: VGroup Boundary of a VMobject with animated color change. Examples Example: AnimatedBoundaryExample ¶ from manim import * class AnimatedBoundaryExample ( Scene ): def construct ( self ): text = Text ( "So shiny!" ) boundary = AnimatedBoundary ( text , colors = [ RED , GREEN , BLUE ], cycle_rate = 3 ) self . add ( text , boundary ) self . wait ( 2 ) class AnimatedBoundaryExample(Scene):
+    def construct(self):
+        text = Text("So shiny!")
+        boundary = AnimatedBoundary(text, colors=[RED, GREEN, BLUE],
+                                    cycle_rate=3)
+        self.add(text, boundary)
+        self.wait(2) Methods full_family_become_partial update_boundary_copies Attributes always Call a method on a mobject every frame. animate Used to animate the application of any method of self . animation_overrides color depth The depth of the mobject. fill_color If there are multiple colors (for gradient) this returns the first one height The height of the mobject. n_points_per_curve sheen_factor stroke_color width The width of the mobject. Parameters : vmobject ( VMobject ) colors ( Sequence [ ParsableManimColor ] ) max_stroke_width ( float ) cycle_rate ( float ) back_and_forth ( bool ) draw_rate_func ( RateFunction ) fade_rate_func ( RateFunction ) kwargs ( Any ) _original__init__ ( vmobject, colors=[ManimColor('#29ABCA'), ManimColor('#9CDCEB'), ManimColor('#236B8E'), ManimColor('#736357')], max_stroke_width=3, cycle_rate=0.5, back_and_forth=True, draw_rate_func=<function smooth>, fade_rate_func=<function smooth>, **kwargs ) ¶ Initialize self.  See help(type(self)) for accurate signature. Parameters : vmobject ( VMobject ) colors ( Sequence [ TypeAliasForwardRef ( '~manim.utils.color.core.ParsableManimColor' ) ] ) max_stroke_width ( float ) cycle_rate ( float ) back_and_forth ( bool ) draw_rate_func ( RateFunction ) fade_rate_func ( RateFunction ) kwargs ( Any )

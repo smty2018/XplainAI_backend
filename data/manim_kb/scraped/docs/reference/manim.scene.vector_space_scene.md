@@ -1,0 +1,11 @@
+# vector_space_scene ¶
+
+Source: https://docs.manim.community/en/stable/reference/manim.scene.vector_space_scene.html
+
+# vector_space_scene ¶
+
+A scene suitable for vector spaces.
+
+Classes
+
+LinearTransformationScene | This scene contains special methods that make it especially suitable for showing linear transformations. | VectorScene

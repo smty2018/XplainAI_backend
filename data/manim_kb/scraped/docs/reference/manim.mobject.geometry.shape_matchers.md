@@ -1,0 +1,11 @@
+# shape_matchers ¶
+
+Source: https://docs.manim.community/en/stable/reference/manim.mobject.geometry.shape_matchers.html
+
+# shape_matchers ¶
+
+Mobjects used to mark and annotate other mobjects.
+
+Classes
+
+BackgroundRectangle | A background rectangle. | Cross | Creates a cross. | SurroundingRectangle | A rectangle surrounding a | Mobject | Underline | Creates an underline.

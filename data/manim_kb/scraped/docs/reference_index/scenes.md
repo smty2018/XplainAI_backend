@@ -1,0 +1,7 @@
+# Scenes ¶
+
+Source: https://docs.manim.community/en/stable/reference_index/scenes.html
+
+# Scenes ¶
+
+moving_camera_scene | A scene whose camera can be moved around. | section | building blocks of segmented video API | scene | Basic canvas for animations. | scene_file_writer | The interface between scenes and ffmpeg. | three_d_scene | A scene suitable for rendering three-dimensional objects and animations. | vector_space_scene | A scene suitable for vector spaces. | zoomed_scene | A scene supporting zooming in on a specified section.

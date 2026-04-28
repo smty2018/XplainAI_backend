@@ -1,0 +1,40 @@
+# Changelog ¶
+
+Source: https://docs.manim.community/en/stable/changelog.html
+
+# Changelog ¶
+
+This page contains a list of changes made between releases.
+
+- v0.20.1
+- v0.20.0
+- v0.19.2
+- v0.19.1
+- v0.19.0
+- v0.18.1
+- v0.18.0.post0
+- v0.18.0
+- v0.17.3
+- v0.17.2
+- v0.17.1
+- v0.17.0
+- v0.16.0
+- v0.15.2
+- v0.15.1
+- v0.15.0
+- v0.14.0
+- v0.13.1
+- v0.13.0
+- v0.12.0
+- v0.11.0
+- v0.10.0
+- v0.9.0
+- v0.8.0
+- v0.7.0
+- v0.6.0
+- v0.5.0
+- v0.4.0
+- v0.3.0
+- v0.2.0
+- v0.1.1
+- v0.1.0

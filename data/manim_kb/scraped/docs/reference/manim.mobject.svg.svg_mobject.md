@@ -1,0 +1,11 @@
+# svg_mobject ¶
+
+Source: https://docs.manim.community/en/stable/reference/manim.mobject.svg.svg_mobject.html
+
+# svg_mobject ¶
+
+Mobjects generated from an SVG file.
+
+Classes
+
+SVGMobject | A vectorized mobject created from importing an SVG file. | VMobjectFromSVGPath | A vectorized mobject representing an SVG path.

@@ -1,0 +1,11 @@
+# vector_field ¶
+
+Source: https://docs.manim.community/en/stable/reference/manim.mobject.vector_field.html
+
+# vector_field ¶
+
+Mobjects representing vector fields.
+
+Classes
+
+ArrowVectorField | A | VectorField | represented by a set of change vectors. | StreamLines | StreamLines represent the flow of a | VectorField | using the trace of moving agents. | VectorField | A vector field.

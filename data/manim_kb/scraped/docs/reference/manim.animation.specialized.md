@@ -1,0 +1,9 @@
+# specialized ¶
+
+Source: https://docs.manim.community/en/stable/reference/manim.animation.specialized.html
+
+# specialized ¶
+
+Classes
+
+Broadcast | Broadcast a mobject starting from an | initial_width | , up to the actual size of the mobject.

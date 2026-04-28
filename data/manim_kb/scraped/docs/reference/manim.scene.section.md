@@ -1,0 +1,11 @@
+# section ¶
+
+Source: https://docs.manim.community/en/stable/reference/manim.scene.section.html
+
+# section ¶
+
+building blocks of segmented video API
+
+Classes
+
+DefaultSectionType | The type of a section can be used for third party applications. | Section | A | Scene | can be segmented into multiple Sections.

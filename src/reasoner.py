@@ -222,6 +222,8 @@ class MathematicalReasoner:
 
     def prepare_prompt(self, parsed_input: Dict[str, Any], style: SolutionStyle) -> str:
         template = self.solution_templates[style.value]
+        verification_targets = self._infer_verification_targets(parsed_input)
+        retrieval_targets = self._infer_retrieval_targets(parsed_input)
         prompt = template.format(
             problem=self._extract_problem_statement(parsed_input),
             context=self._build_context(parsed_input),
@@ -232,8 +234,8 @@ class MathematicalReasoner:
             intent=parsed_input.get("intent", "concept_explanation"),
             secondary_intents=", ".join(parsed_input.get("secondary_intents", [])) or "None",
             asks="; ".join(parsed_input.get("asks", [])) or "None",
-            verification_targets=self._format_targets(parsed_input.get("verification_targets", {})),
-            retrieval_targets=self._format_targets(parsed_input.get("retrieval_targets", {})),
+            verification_targets=self._format_targets(verification_targets),
+            retrieval_targets=self._format_targets(retrieval_targets),
             topic=parsed_input.get("topic", "the concept"),
             question=parsed_input.get("_source_text", ""),
             prerequisites=self._list_prerequisites(parsed_input),
@@ -252,6 +254,7 @@ class MathematicalReasoner:
         verification_report: Dict[str, Any],
     ) -> str:
         template = self.solution_templates["solution_repair"]
+        verification_targets = self._infer_verification_targets(parsed_input)
         prompt = template.format(
             problem=self._extract_problem_statement(parsed_input),
             context=self._build_context(parsed_input),
@@ -260,7 +263,7 @@ class MathematicalReasoner:
             domain=parsed_input.get("domain", "general"),
             complexity=parsed_input.get("complexity", "intermediate"),
             asks="; ".join(parsed_input.get("asks", [])) or "None",
-            verification_targets=self._format_targets(parsed_input.get("verification_targets", {})),
+            verification_targets=self._format_targets(verification_targets),
             previous_solution=previous_solution.get("full_text", "") or "No previous solution text available.",
             verification_report=json.dumps(verification_report, indent=2, ensure_ascii=False),
         )
@@ -346,6 +349,80 @@ class MathematicalReasoner:
     def _format_targets(self, targets: Dict[str, Any]) -> str:
         enabled = [key for key, value in targets.items() if bool(value)]
         return ", ".join(enabled) if enabled else "None"
+
+    def _infer_verification_targets(self, parsed_input: Dict[str, Any]) -> Dict[str, bool]:
+        equations = parsed_input.get("equations", [])
+        entities = parsed_input.get("entities", {}) if isinstance(parsed_input.get("entities"), dict) else {}
+        units = entities.get("units", []) if isinstance(entities, dict) else []
+        source_text = str(parsed_input.get("_source_text", "")).lower()
+        domain = str(parsed_input.get("domain", "")).lower()
+        key_concepts = {
+            str(item).strip().lower()
+            for item in parsed_input.get("key_concepts", [])
+            if str(item).strip()
+        }
+
+        constraint_phrases = (
+            "subject to",
+            "constraint",
+            "positive",
+            "negative",
+            "nonnegative",
+            "non-positive",
+            "greater than",
+            "less than",
+            "at least",
+            "at most",
+        )
+        edge_case_phrases = (
+            "edge case",
+            "boundary",
+            "limit",
+            "singularity",
+            "undefined",
+            "as x approaches",
+            "corner case",
+        )
+
+        has_constraints = any(phrase in source_text for phrase in constraint_phrases)
+        has_edge_case_signal = any(phrase in source_text for phrase in edge_case_phrases)
+        if not has_edge_case_signal:
+            has_edge_case_signal = any(
+                concept in {"limit", "continuity", "domain", "asymptote"}
+                for concept in key_concepts
+            )
+
+        return {
+            "sympy": bool(equations),
+            "unit_check": bool(units),
+            "constraint_check": has_constraints,
+            "edge_case_check": has_edge_case_signal and (
+                bool(equations) or domain in {"physics", "engineering", "cs"}
+            ),
+        }
+
+    def _infer_retrieval_targets(self, parsed_input: Dict[str, Any]) -> Dict[str, bool]:
+        intent = str(parsed_input.get("intent", "")).strip().lower()
+        secondary = {
+            str(item).strip().lower()
+            for item in parsed_input.get("secondary_intents", [])
+            if str(item).strip()
+        }
+        equations = parsed_input.get("equations", [])
+        source_text = str(parsed_input.get("_source_text", "")).lower()
+
+        similar_problem_needed = intent in {"application", "application_focused", "comparison"} or bool(
+            secondary.intersection({"application", "application_focused", "comparison"})
+        )
+        misconception_needed = intent in {"concept_explanation", "derivation"} or "why" in source_text
+        visualization_needed = bool(equations) or intent in {"equation_visualization", "visualization"}
+
+        return {
+            "similar_problems": similar_problem_needed,
+            "misconceptions": misconception_needed,
+            "visualization_patterns": visualization_needed,
+            "explanation_style": True,
+        }
 
     def _list_prerequisites(self, parsed_input: Dict[str, Any]) -> str:
         domain = str(parsed_input.get("domain", "")).lower()

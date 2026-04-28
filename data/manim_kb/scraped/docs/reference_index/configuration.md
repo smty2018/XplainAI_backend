@@ -1,0 +1,9 @@
+# Configuration ¶
+
+Source: https://docs.manim.community/en/stable/reference_index/configuration.html
+
+# Configuration ¶
+
+## Module Index ¶
+
+_config | Set the global config and logger. | utils | Utilities to create and set the config. | logger_utils | Utilities to create and set the logger.

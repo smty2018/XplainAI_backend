@@ -12,6 +12,12 @@ You can drop additional material here, including:
 
 The indexer also ingests files from `prompt_assets/`, so this folder is meant for extra Manim-focused knowledge that should sit beside the prompt templates.
 
+Scraped community docs/examples can be generated via:
+
+- `python -m scraper.manim_scraper`
+
+They will be written under `data/manim_kb/scraped/`.
+
 Supported file types:
 
 - `.md`

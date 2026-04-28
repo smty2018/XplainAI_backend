@@ -1,0 +1,11 @@
+# graphing ¶
+
+Source: https://docs.manim.community/en/stable/reference/manim.mobject.graphing.html
+
+# graphing ¶
+
+Coordinate systems and function graphing related mobjects.
+
+## Modules ¶
+
+coordinate_systems | Mobjects that represent coordinate systems. | functions | Mobjects representing function graphs. | number_line | Mobject representing a number line. | probability | Mobjects representing objects from probability theory and statistics. | scale

@@ -1,0 +1,11 @@
+# changing ¶
+
+Source: https://docs.manim.community/en/stable/reference/manim.animation.changing.html
+
+# changing ¶
+
+Animation of a mobject boundary and tracing of points.
+
+Classes
+
+AnimatedBoundary | Boundary of a | VMobject | with animated color change. | TracedPath | Traces the path of a point returned by a function call.

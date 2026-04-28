@@ -1,0 +1,9 @@
+# RerunSceneHandler ¶
+
+Source: https://docs.manim.community/en/stable/reference/manim.scene.scene.RerunSceneHandler.html
+
+# RerunSceneHandler ¶
+
+Qualified name: manim.scene.scene.RerunSceneHandler
+
+class RerunSceneHandler ( queue ) [source] ¶ Bases: FileSystemEventHandler A class to handle rerunning a Scene after the input file is modified. Methods on_modified Called when a file or directory is modified. Parameters : queue ( Queue [ SceneInteractAction ] ) on_modified ( event ) [source] ¶ Called when a file or directory is modified. Parameters : event ( DirModifiedEvent or FileModifiedEvent ) – Event representing file/directory modification. Return type : None

@@ -368,6 +368,8 @@ class LocalParser:
 
     def _finalize_result(self, result: Dict) -> Dict:
         """Save a result after all metadata has been attached."""
+        result.pop("verification_targets", None)
+        result.pop("retrieval_targets", None)
         self.last_timing = result.get("_timing", {})
         self._save_result(result)
         return result

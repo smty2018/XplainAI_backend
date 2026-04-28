@@ -1,0 +1,11 @@
+# numbers ¶
+
+Source: https://docs.manim.community/en/stable/reference/manim.mobject.text.numbers.html
+
+# numbers ¶
+
+Mobjects representing numbers.
+
+Classes
+
+DecimalNumber | An mobject representing a decimal number. | Integer | A class for displaying Integers. | Variable | A class for displaying text that shows "label = value" with the value continuously updated from a | ValueTracker | .

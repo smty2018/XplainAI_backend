@@ -1,0 +1,11 @@
+# code_mobject ¶
+
+Source: https://docs.manim.community/en/stable/reference/manim.mobject.text.code_mobject.html
+
+# code_mobject ¶
+
+Mobject representing highlighted source code listings.
+
+Classes
+
+Code | A highlighted source code listing.
