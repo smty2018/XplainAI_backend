@@ -3,6 +3,7 @@ Strict no-overlap rules for generated Manim code:
 1. One major content group per box at a time.
 - A formula box may show one full equation group at once.
 - Before a new full equation enters the same box, the old one must fully leave or be replaced in-place.
+- Reusing the same box across scenes is allowed only when the transition explicitly removes or replaces the previous occupant.
 
 2. Never use `.shift()` as the primary way to separate major objects after `place_in_box(...)`.
 - If two objects need distinct vertical positions, create two distinct boxes.
@@ -28,6 +29,7 @@ Strict no-overlap rules for generated Manim code:
 5. Add dedicated helpers for formula layout.
 - `stack_in_box(mobs, box, gap=...)`
 - `replace_in_box(old_mob, new_mob, box, ...)`
+- `clear_box_owner(old_mob, ...)` or `swap_box_owner(old_mob, new_mob, box, ...)`
 - `mobjects_overlap(mob_a, mob_b, gap=...)`
 - `resolve_overlap(mob, blockers, box, gap=..., step=...)`
 - `layout_pass(mobs, box, blockers=...)`
@@ -38,9 +40,14 @@ Strict no-overlap rules for generated Manim code:
 
 7. Favor sequential visibility over simultaneous density.
 - In algebra scenes, do not keep the old factorization, the distributed expansion, and the combined result all visible in the same region unless each has its own dedicated box.
+- In calculus evaluation scenes, do not keep `Antiderivative:` text, the primitive function, and the substitution stack visible in one formula band unless each has a separate box.
+- When a box changes owners, treat that as a scene transition event: old owner out, new arranged owner in, then reveal details inside the new owner.
 
 8. Final self-check before returning code.
 - No two visible major groups overlap.
 - No formula spills outside its box.
 - No dense formula is manually nudged by repeated `.shift(...)` after initial placement.
 - No crowded same-box expression uses partial-index transforms when a safer full-group replacement is possible.
+- If the scene includes axes, both axes are labeled and readable.
+- If the problem specifies vertical boundaries such as `x = a` and `x = b`, both boundary lines are actually drawn and labeled.
+- If a shaded graph region is shown, it is bounded by the same curve/axis/lines named in the problem statement.

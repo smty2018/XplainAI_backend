@@ -26,6 +26,9 @@ Use relative positioning only for small local relationships after the main boxes
 For crowded formula regions or subtitles, use fade swaps instead of large in-place transforms.
 Pattern:
 - `fade_swap(old_mob, new_mob)`
+- Better for reusable formula bands:
+- `replace_in_box(old_group, new_group, formula_box)`
+- or an equivalent explicit box-owner swap helper
 
 7. Use scene-specific box dictionaries.
 Declare scene layouts up front as dictionaries such as:
@@ -36,11 +39,20 @@ Declare scene layouts up front as dictionaries such as:
 8. Reserve space before animating.
 Budget width and height for graphs, braces, formulas, labels, and final answer boxes before adding them.
 
+8b. Graph scenes need explicit structural marks.
+- If a graph uses axes, label the x-axis and y-axis clearly.
+- If the problem names vertical boundaries like `x = 1` and `x = 4`, those lines should be drawn at the actual coordinates, not just mentioned as floating text.
+- If a bounded region is shaded, make sure the curve, x-axis, and every stated boundary line are all visible together.
+
 9. Formula scenes need stricter rules than generic scenes.
 - Never keep two dense equations in the same box at the same time.
 - Never rely on `.shift()` after `place_in_box(...)` to create a stacked formula layout.
 - Instead, create separate formula boxes or a vertical stack helper that arranges formulas inside one parent box.
 - Every major equation state that appears in `FadeIn`, `Transform`, or `ReplacementTransform` must be placed in its destination box before the animation begins.
+- If a formula box is reused across successive scenes, the old box occupant must explicitly leave or be replaced before the new group is revealed.
+- Do not keep an intermediate heading like `Antiderivative:` or an earlier formula visible underneath later evaluation lines in the same box.
+- For sequential evaluation, replace the old formula group with a new evaluation container first, then reveal lines within that container.
+- Build the new evaluation container with `VGroup(...).arrange(DOWN, ...)` before it enters the box, so the box owner is a single arranged group instead of several floating lines.
 - If braces or coefficient labels are needed, reserve a separate annotation band below or beside the equation instead of attaching them inside the same dense formula box.
 - Do not create braces and labels with `next_to(...)` and then move the whole brace+label group into another box; build the braces from the already-positioned equation and place the labels in their own box or row.
 - Avoid partial indexed transforms between long `MathTex` expressions; use full-group replacements.

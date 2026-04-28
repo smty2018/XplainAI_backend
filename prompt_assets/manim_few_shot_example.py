@@ -100,6 +100,13 @@ class BoxLayoutScene(VoiceoverScene):
             lag_ratio=0.0,
         )
 
+    def reveal_arranged_group(self, group, lag_ratio=0.12, shift=0.08 * UP):
+        # Once a box has a single owner, we can safely reveal its internal rows one by one.
+        return LaggedStart(
+            *[FadeIn(item, shift=shift) for item in group],
+            lag_ratio=lag_ratio,
+        )
+
     def mobjects_overlap(self, mob_a, mob_b, gap=0.06):
         x_overlap = min(mob_a.get_right()[0], mob_b.get_right()[0]) - max(
             mob_a.get_left()[0], mob_b.get_left()[0]
@@ -136,6 +143,11 @@ class BoxLayoutScene(VoiceoverScene):
         subtitle = Text("Subtitle", font_size=26, color=SYSTEM_COLOR)
         formula = MathTex(r"y(t)=2u(t+2)-3u(t+1)+u(t-2)")
         formula_next = MathTex(r"y^2(t)=4")
+        evaluation_rows = [
+            MathTex(r"\left[2x^2 - \frac{1}{3}x^3\right]_{1}^{4}"),
+            MathTex(r"= \left(32 - \frac{64}{3}\right) - \left(2 - \frac{1}{3}\right)"),
+            MathTex(r"= 9"),
+        ]
 
         self.place_in_box(title, SCENE1_BOXES["title"])
         self.place_in_box(subtitle, SCENE1_BOXES["subtitle"])
@@ -148,6 +160,7 @@ class BoxLayoutScene(VoiceoverScene):
             y_length=SCENE1_BOXES["graph"]["height"],
             tips=False,
         ).move_to(SCENE1_BOXES["graph"]["center"])
+        axes_labels = axes.get_axis_labels(x_label=MathTex("x"), y_label=MathTex("y"))
 
         # Small callouts get their own corner box instead of sitting on top of the graph.
         callout = Text("Important note", font_size=20, color=YELLOW)
@@ -155,9 +168,13 @@ class BoxLayoutScene(VoiceoverScene):
 
         result = Text("Energy = 7", font_size=34, color=WHITE)
         self.place_in_box(result, SCENE1_BOXES["final_answer"])
+        # The evaluation stack is arranged before it enters the shared formula band.
+        evaluation_group = self.stack_in_box(evaluation_rows, SCENE1_BOXES["formula"], gap=0.12)
 
         # Fade-based swaps are safer here than an in-place transform in a crowded formula band.
         with self.voiceover(text="Demonstrate the box-based layout system.") as tracker:
             self.play(Write(title), FadeIn(subtitle), FadeIn(formula))
             self.play(self.replace_in_box(formula, formula_next, SCENE1_BOXES["formula"]))
-            self.play(Create(axes), FadeIn(callout), FadeIn(result))
+            self.play(self.replace_in_box(formula_next, evaluation_group, SCENE1_BOXES["formula"]))
+            self.play(self.reveal_arranged_group(evaluation_group))
+            self.play(Create(axes), FadeIn(axes_labels), FadeIn(callout), FadeIn(result))

@@ -677,6 +677,53 @@ class MathematicalReasoner:
         value = re.sub(r"(?im)^\s*```\s*$", "", value)
         return value.strip()
 
+    def _box_reuse_has_stale_content_risk(self, code: str) -> bool:
+        value = str(code or "")
+        placement_matches = list(
+            re.finditer(r"place_in_box\(\s*([A-Za-z_]\w*)\s*,\s*([A-Za-z_]\w*)", value)
+        )
+        if not placement_matches:
+            return False
+
+        placements_by_box: Dict[str, List[Tuple[str, int]]] = {}
+        for match in placement_matches:
+            mob_name = match.group(1)
+            box_name = match.group(2)
+            placements_by_box.setdefault(box_name, []).append((mob_name, match.start()))
+
+        # Reusing one formula/graph box is fine only if the previous major group
+        # clearly exits before the next one becomes the new occupant.
+        for box_name, placements in placements_by_box.items():
+            normalized_box = box_name.casefold()
+            if not any(
+                token in normalized_box
+                for token in ["formula", "equation", "math", "annotation", "callout", "result"]
+            ):
+                continue
+            if len(placements) < 2:
+                continue
+
+            for index in range(1, len(placements)):
+                previous_name, _previous_start = placements[index - 1]
+                current_name, current_start = placements[index]
+                next_start = placements[index + 1][1] if index + 1 < len(placements) else len(value)
+                window = value[current_start:next_start]
+                transition_markers = [
+                    f"replace_in_box({previous_name}, {current_name}, {box_name}",
+                    f"replace_in_box({previous_name},{current_name},{box_name}",
+                    f"ReplacementTransform({previous_name}, {current_name}",
+                    f"ReplacementTransform({previous_name},{current_name}",
+                    f"Transform({previous_name}, {current_name}",
+                    f"Transform({previous_name},{current_name}",
+                    f"FadeOut({previous_name}",
+                    f"FadeOut({previous_name},",
+                    f"{previous_name}.animate.set_opacity(0",
+                ]
+                if not any(marker in window for marker in transition_markers):
+                    return True
+
+        return False
+
     def _manim_code_has_overlap_risk(self, code: str) -> bool:
         value = str(code or "")
         if not value.strip():
@@ -699,6 +746,8 @@ class MathematicalReasoner:
             "def fit_to_box",
             "def keep_inside_box",
             "def place_in_box",
+            "def stack_in_box",
+            "def replace_in_box",
             "def mobjects_overlap",
             "def resolve_overlap",
         ]
@@ -734,6 +783,8 @@ class MathematicalReasoner:
         if value.count("place_in_box(") >= 3 and value.count(".shift(") >= 3:
             return True
         if value.count("place_in_box(") >= 3 and "resolve_overlap(" not in value:
+            return True
+        if self._box_reuse_has_stale_content_risk(value):
             return True
         return False
 
@@ -809,6 +860,8 @@ class MathematicalReasoner:
                 "- Include a strict scene-by-scene animation plan in the correct order.",
                 "- Use scene names and explicit scene goals.",
                 "- Include visual design rules, colors, labels, camera behavior, and annotation guidance.",
+                "- For graph scenes, explicitly require labeled x- and y-axes unless the source material truly has no meaningful axis semantics.",
+                "- If a problem states vertical boundaries such as x = a and x = b, explicitly require those boundary lines to be drawn, labeled, and connected to the shaded region when relevant.",
                 "- Assume the downstream Manim video is narrated unless the user explicitly asks for a silent animation.",
                 "- Include layout and overlap-prevention guidance that preserves a box-based layout workflow.",
                 "- Include technical requirements using Manim Community Edition primitives such as Axes, MathTex, VGroup, Brace, plot/plot_line_graph, Create, Transform, ReplacementTransform, FadeIn, FadeOut.",
@@ -905,6 +958,11 @@ class MathematicalReasoner:
                 "- Use modern Manim animation syntax such as `self.play(mobject.animate.rotate(...), run_time=...)`; do not use deprecated method-passing patterns like `self.play(mobject.rotate, angle, ...)`.",
                 "- Apply this layout order: fixed scene boxes first, fit each object to its box, clamp inside the box, collision-check as a final pass.",
                 "- Enforce a strict no-overlap policy for all visible major objects.",
+                "- For graph scenes, draw and label the axes clearly. If you use `Axes`, include visible x-axis and y-axis labels such as `x` and `y` unless the problem context requires different symbols.",
+                "- If the math references vertical boundaries like `x = 1` or `x = 4`, draw those actual boundary lines at the correct locations instead of showing only floating text labels.",
+                "- When shading a bounded area, ensure the shaded region, curve, x-axis, and every stated boundary line are visually consistent and all visible at the same time.",
+                "- Before introducing a new major formula group into the same formula box, explicitly remove or replace the previous box occupant. Do not leave a heading, intermediate formula, or explanatory label alive underneath the next evaluation stack.",
+                "- For step-by-step evaluation scenes, replace the previous formula group with one evaluation container first, then reveal the lines inside that container. Do not stack the new lines on top of an old formula group in the same band.",
                 "- Every major formula state used in `FadeIn`, `Transform`, or `ReplacementTransform` must be explicitly placed in its destination box before the animation starts.",
                 "- Use only Manim Community Edition-safe colors: prefer hex strings like `\"#00BCD4\"` or clearly supported constants such as `BLUE`, `GREEN`, `RED`, `YELLOW`, `WHITE`, `GRAY`, `ORANGE`, `PURPLE`, `TEAL`.",
                 "- Do not use unsupported bare color names such as `CYAN` unless you define them yourself.",
@@ -914,15 +972,18 @@ class MathematicalReasoner:
                 "- Do not build brace labels with `next_to(...)` and then move the entire brace+label group into another box. Build braces from an already-positioned equation and place labels in a dedicated coefficient or annotation box.",
                 "- Do not use indexed submobject transforms between long formulas when a full-group replacement is safer.",
                 "- Add helpers such as `stack_in_box(...)`, `replace_in_box(...)`, or equivalent safe layout utilities.",
+                "- Prefer a dedicated helper such as `replace_in_box(...)`, `swap_box_owner(...)`, or `clear_box_owner(...)` whenever a formula band changes ownership between scenes.",
                 "- Avoid primary layout via chained relative positioning like repeated .shift() or .next_to() for major scene structure.",
                 "- Include helper methods equivalent to fit_to_box, keep_inside_box, place_in_box, mobjects_overlap, and resolve_overlap.",
                 "- Do not treat collision helpers as optional; the final script must define them.",
                 "- After placing multiple major mobjects in a scene, call `resolve_overlap(...)` as a final safety step whenever crowding is possible.",
                 "- Use fade-based swaps in tight regions instead of aggressive in-place transforms when appropriate.",
+                "- Build multi-line derivations and evaluation stacks with `VGroup(...).arrange(DOWN, ...)` or `arrange_in_grid(...)`, then place the arranged container into the box as one owner.",
                 "- Follow the Scene Planner faithfully and do not invent missing numeric details.",
                 "- If the Scene Planner leaves a visual detail unspecified, implement the safest minimal version.",
                 "- Every `VGroup` must contain only Mobjects. Never place raw coordinates, numpy arrays, or scalar values inside `VGroup`.",
                 "- Build formula mobjects explicitly before wrapping them in `SurroundingRectangle` or grouped animations.",
+                "- For `Axes`, prefer `axes.get_axis_labels(...)` for readable axis labels instead of leaving the graph unlabeled.",
                 "- If you use `get_part_by_tex(...)` on `MathTex` or `Tex`, make sure the target token is isolated with `substrings_to_isolate=[...]` or use a fallback-safe highlight strategy instead of assuming the part exists.",
                 "- Before finalizing, self-check for runnable structure: valid imports, one scene class, only Mobjects in groups, no markdown fences, and no placeholder comments like TODO.",
                 "- Keep the code modular, readable, and directly runnable.",
@@ -976,8 +1037,9 @@ class MathematicalReasoner:
                 "pattern with VoiceoverScene, CoquiService, AudioSegment.converter = imageio_ffmpeg.get_ffmpeg_exe(), "
                 "and with self.voiceover(...) blocks. It must also include helper methods equivalent to fit_to_box, "
                 "keep_inside_box, place_in_box, mobjects_overlap, and resolve_overlap, and must use resolve_overlap "
-                "as a final safety step where crowding could occur. Add concise humanlike comments before major "
-                "scene sections and any non-obvious layout or animation choices."
+                "as a final safety step where crowding could occur. When a formula box is reused across scenes, the "
+                "previous formula group must be explicitly replaced or removed before the next one is revealed. Add "
+                "concise humanlike comments before major scene sections and any non-obvious layout or animation choices."
             ),
             max_tokens=int(self.config.get("manim_layout_refiner_max_tokens", 8192)),
             model_name=self.manim_layout_refiner_model,
@@ -1206,7 +1268,8 @@ class SolutionOrchestrator:
                 self._emit_progress(progress_callback, "cache", "Loaded cached pipeline result.")
                 return cached
         if isinstance(input_data, dict) and "intent" in input_data:
-            self._emit_progress(progress_callback, "parse", "Using pre-parsed input and skipping parser stage.")
+            # The caller has already logged the real parser work, so emitting a
+            # second "skip parse" message here just makes the UI look wrong.
             parsed = dict(input_data)
         else:
             parser_target = self.parser.__class__.__name__
