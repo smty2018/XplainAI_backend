@@ -7,6 +7,8 @@ from chromadb.api.client import SharedSystemClient
 
 
 def load_manim_rag_module():
+    # The tests import the module by path so they stay stable even if the repo
+    # isn't installed as a package in the active environment.
     root = Path(__file__).resolve().parents[1]
     module_path = root / "src" / "manim_rag.py"
     spec = importlib.util.spec_from_file_location("manim_rag_module", module_path)
@@ -23,6 +25,8 @@ class TestManimKnowledgeBase(unittest.TestCase):
         cls.root = Path(__file__).resolve().parents[1]
         cls.module = load_manim_rag_module()
         cls.persist_dir = Path(tempfile.mkdtemp(prefix="test_chroma_manim_kb_"))
+        # Each test class gets its own throwaway Chroma dir so retrieval tests
+        # don't accidentally depend on a developer's existing local index.
         cls.kb = cls.module.ManimKnowledgeBase(
             cls.root,
             {
@@ -48,6 +52,8 @@ class TestManimKnowledgeBase(unittest.TestCase):
         cls.kb = None
 
     def test_index_has_seed_documents(self):
+        # This is the first guardrail: if the seed corpus never indexed, the
+        # retrieval quality tests below are not worth trusting.
         status = self.kb.get_status()
         self.assertTrue(status["enabled"])
         self.assertGreater(status["document_count"], 0)
@@ -99,6 +105,8 @@ class TestManimKnowledgeBase(unittest.TestCase):
         self.assertIn("quadratic equations", result["query"].lower())
 
     def test_manim_code_retrieval_prefers_code_or_examples(self):
+        # The codegen stage should lean toward concrete example snippets, not
+        # just prose guidance, because that tends to produce more runnable output.
         parsed_input = {
             "topic": "quadratic equations",
             "domain": "mathematics",

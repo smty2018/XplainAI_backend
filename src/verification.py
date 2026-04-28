@@ -87,6 +87,8 @@ class VerificationEngine:
     }
 
     def __init__(self) -> None:
+        # We keep the verifier lightweight on purpose: useful enough to catch obvious math drift,
+        # but cheap enough to run on every solution before visualization.
         self.sympy_available = sp is not None and parse_expr is not None
         self._transformations = standard_transformations
         if implicit_multiplication_application is not None and convert_xor is not None:
@@ -96,6 +98,8 @@ class VerificationEngine:
             )
 
     def run(self, parsed_input: Dict[str, Any], solution: Dict[str, Any]) -> Dict[str, Any]:
+        # Post-solution verification is the gatekeeper between "the model proposed this"
+        # and "we trust this enough to animate it."
         start = perf_counter()
         requested = self._normalize_requested_checks(
             parsed_input.get("verification_targets"),
@@ -160,6 +164,7 @@ class VerificationEngine:
         *,
         enabled: bool,
     ) -> Dict[str, Any]:
+        # The symbolic path independently solves parser-grounded equations, then compares that truth to the LLM's claimed answer.
         if not enabled:
             return self._skipped_report("sympy", "SymPy verification was not requested for this input.")
         if not self.sympy_available:
@@ -262,6 +267,7 @@ class VerificationEngine:
         *,
         enabled: bool,
     ) -> Dict[str, Any]:
+        # This is intentionally a heuristic unit check for now; it is meant to catch obvious mismatches, not replace full dimensional analysis.
         if not enabled:
             return self._skipped_report("unit_check", "Unit checking was not requested for this input.")
 

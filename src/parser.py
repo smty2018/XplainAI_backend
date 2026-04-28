@@ -58,6 +58,8 @@ class LocalParser:
         self.processor = None
         self.tokenizer = None
         self.last_timing: Dict[str, Union[str, float, bool]] = {}
+        # These domain cues are deliberately broad because we use them to steer
+        # the first-pass parser prompt, not to make a final hard classification.
         self.domain_terms = {
             "physics": [
                 "quantum mechanics",
@@ -368,6 +370,8 @@ class LocalParser:
 
     def _finalize_result(self, result: Dict) -> Dict:
         """Save a result after all metadata has been attached."""
+        # Verification and retrieval targeting now happen downstream. We still
+        # infer them internally, but we keep the public parser payload cleaner.
         result.pop("verification_targets", None)
         result.pop("retrieval_targets", None)
         self.last_timing = result.get("_timing", {})
@@ -894,6 +898,9 @@ class LocalParser:
 
     def _analyze_text(self, text: str, input_type: str = "text") -> Dict[str, Any]:
         """Build heuristic analysis for parser enrichment."""
+        # This pass gives the model strong hints before it writes JSON. In
+        # practice that keeps the parser far more stable than asking VL2 to
+        # infer everything from scratch every time.
         equations = self._extract_equations_from_text(text)
         technical_terms = self._find_technical_terms(text)
         domain, domain_scores = self._infer_domain(text, technical_terms)
@@ -1486,6 +1493,8 @@ class LocalParser:
         page_count: int = 0,
     ) -> Dict[str, Any]:
         """Normalize the output into a single rich schema."""
+        # Every backend eventually lands here, so this function is where we make
+        # the rest of the pipeline see one consistent parser shape.
         input_result = dict(result) if isinstance(result, dict) else {}
         base = self._build_base_result(input_type)
         normalized = dict(base)
@@ -1831,6 +1840,8 @@ class LocalParser:
             f"Query: {text}"
         )
 
+        # For raw text inputs we let the model stay text-only; the visual
+        # backends are reserved for images/PDFs where OCR and layout matter.
         response, model_timing = self._run_vl2(
             prompt,
             max_new_tokens=self.config.get("max_new_tokens_text", 320),
@@ -1867,6 +1878,8 @@ class LocalParser:
         supplemental_parts = []
         if user_prompt:
             supplemental_parts.append(user_prompt)
+        # We fold the model's own OCR-ish text back into normalization so later
+        # stages have one place to look for visible labels and formulas.
         visual_text = self._visual_text_from_result(model_result)
         if visual_text:
             supplemental_parts.append(visual_text)
@@ -1940,6 +1953,8 @@ class LocalParser:
             self._safe_print(f"Limiting to first {max_pages} pages")
             images = images[:max_pages]
 
+        # PDFs get the same normalized schema as every other input, but we keep
+        # the text layer around as a helpful fallback when OCR misses something.
         prompt = (
             "Analyze this document and respond with valid JSON only.\n"
             "Return ONLY these keys: intent, topic, domain, complexity, language, key_concepts, equations, "
@@ -2111,6 +2126,8 @@ class LocalParser:
                 start = text.find("{", start + 1)
         except Exception as exc:
             parse_error = exc
+        # The parser model occasionally returns almost-valid JSON; salvaging the
+        # useful bits here is much better than throwing away the whole response.
         salvaged = self._salvage_partial_json(text)
         if salvaged:
             return salvaged

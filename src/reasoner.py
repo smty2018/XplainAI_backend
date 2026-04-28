@@ -38,6 +38,7 @@ class MathematicalReasoner:
     """Generate structured math and physics solutions from parsed input."""
 
     def __init__(self, config_path: str = "config/config.yaml"):
+        # One place to wire models, prompt assets, cache paths, and the Manim RAG helper together.
         self.project_root = Path(__file__).parent.parent
         self.config = self._load_config(config_path)
         load_dotenv(self.project_root / ".env")
@@ -81,6 +82,7 @@ class MathematicalReasoner:
         return key.strip().strip("'").strip('"')
 
     def _load_templates(self) -> Dict[str, str]:
+        # These are the core "personas" the pipeline reuses across solving, repair, planning, and codegen.
         return {
             "step_by_step": (
                 "You are an expert mathematics and physics tutor.\n"
@@ -221,6 +223,7 @@ class MathematicalReasoner:
         return SolutionStyle.STEP_BY_STEP
 
     def prepare_prompt(self, parsed_input: Dict[str, Any], style: SolutionStyle) -> str:
+        # Build one grounded prompt from parser facts first, then layer the style-specific framing on top.
         template = self.solution_templates[style.value]
         verification_targets = self._infer_verification_targets(parsed_input)
         retrieval_targets = self._infer_retrieval_targets(parsed_input)
@@ -562,6 +565,7 @@ class MathematicalReasoner:
         parsed_input: Dict[str, Any],
         include_reasoning_trace: bool = False,
     ) -> Dict[str, Any]:
+        # This is the first real LLM proposal: solve the problem cleanly before any visualization work starts.
         total_start = perf_counter()
         style = self.determine_solution_style(parsed_input)
         prompt = self.prepare_prompt(parsed_input, style)
@@ -596,6 +600,7 @@ class MathematicalReasoner:
         verification_report: Dict[str, Any],
         include_reasoning_trace: bool = False,
     ) -> Dict[str, Any]:
+        # The repair pass is deliberately narrow: fix math mismatches without reinventing the whole explanation.
         total_start = perf_counter()
         prompt = self.prepare_repair_prompt(parsed_input, previous_solution, verification_report)
         text, reasoning_content, timing = self._generate_text(prompt)
@@ -655,9 +660,21 @@ class MathematicalReasoner:
 
     def _clean_code_response(self, text: str) -> str:
         value = str(text or "").strip()
-        fenced = re.search(r"```(?:python)?\s*(.*?)```", value, flags=re.DOTALL | re.IGNORECASE)
-        if fenced:
-            value = fenced.group(1).strip()
+        fenced_blocks = re.findall(
+            r"```(?:python)?\s*(.*?)```",
+            value,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        if fenced_blocks:
+            value = max(
+                fenced_blocks,
+                key=lambda block: (
+                    int("from manim" in block or "class " in block),
+                    len(block),
+                ),
+            ).strip()
+        value = re.sub(r"(?im)^\s*```(?:python)?\s*$", "", value)
+        value = re.sub(r"(?im)^\s*```\s*$", "", value)
         return value.strip()
 
     def _manim_code_has_overlap_risk(self, code: str) -> bool:
@@ -694,6 +711,26 @@ class MathematicalReasoner:
         ]
         if any(re.search(pattern, value, flags=re.MULTILINE) for pattern in risky_patterns):
             return True
+        major_formula_assignments = re.findall(
+            r"(?m)^\s*([A-Za-z_]\w*)\s*=\s*(?:MathTex|Tex)\(",
+            value,
+        )
+        for name in major_formula_assignments:
+            lowered = name.lower()
+            if "label" in lowered or "note" in lowered or "caption" in lowered:
+                continue
+            placement_markers = [
+                f"place_in_box({name},",
+                f"{name}.move_to(",
+                f"{name}.next_to(",
+                f"{name}.to_edge(",
+                f"{name}.to_corner(",
+                f"{name}.shift(",
+            ]
+            if not any(marker in value for marker in placement_markers):
+                return True
+        if "Brace(" in value and ".next_to(" in value:
+            return True
         if value.count("place_in_box(") >= 3 and value.count(".shift(") >= 3:
             return True
         if value.count("place_in_box(") >= 3 and "resolve_overlap(" not in value:
@@ -725,6 +762,7 @@ class MathematicalReasoner:
         solution: Dict[str, Any],
         retrieval_context: Optional[Dict[str, Any]] = None,
     ) -> str:
+        # By this stage the math is already solved, so the planner prompt can focus purely on teaching flow and visuals.
         template = self.solution_templates["scene_planner"]
         reasoning_markdown = self._build_solution_markdown(parsed_input, solution)
         prompt = template.format(
@@ -822,6 +860,7 @@ class MathematicalReasoner:
         scene_planner: Dict[str, Any],
         retrieval_context: Optional[Dict[str, Any]] = None,
     ) -> str:
+        # The code generator gets the verified math, the scene plan, and the layout rules all at once.
         template = self.solution_templates["manim_code_generator"]
         reasoning_markdown = self._build_solution_markdown(parsed_input, solution)
         prompt = template.format(
@@ -851,6 +890,8 @@ class MathematicalReasoner:
                 "- Return only executable Python code for Manim Community Edition.",
                 "- Do not return markdown fences, prose, JSON, or explanations.",
                 "- Include imports, constants, helper functions, scene class, and construct method.",
+                "- Add concise humanlike comments throughout the code, especially before major scene sections, layout-sensitive blocks, and non-obvious animation decisions.",
+                "- Comments should explain intent in a natural teammate voice, not state the obvious line-by-line.",
                 "- If any scene class inherits from a helper base such as `BoxLayoutScene`, define that helper base class in the same file before the scene class.",
                 "- Treat the Scene Planner as authoritative and use the Scene Planner Template Reference only to understand its structure and intended level of detail.",
                 "- Parser-Grounded Facts override any conflicting or more specific detail that may appear in the reasoning markdown or Scene Planner.",
@@ -864,11 +905,13 @@ class MathematicalReasoner:
                 "- Use modern Manim animation syntax such as `self.play(mobject.animate.rotate(...), run_time=...)`; do not use deprecated method-passing patterns like `self.play(mobject.rotate, angle, ...)`.",
                 "- Apply this layout order: fixed scene boxes first, fit each object to its box, clamp inside the box, collision-check as a final pass.",
                 "- Enforce a strict no-overlap policy for all visible major objects.",
+                "- Every major formula state used in `FadeIn`, `Transform`, or `ReplacementTransform` must be explicitly placed in its destination box before the animation starts.",
                 "- Use only Manim Community Edition-safe colors: prefer hex strings like `\"#00BCD4\"` or clearly supported constants such as `BLUE`, `GREEN`, `RED`, `YELLOW`, `WHITE`, `GRAY`, `ORANGE`, `PURPLE`, `TEAL`.",
                 "- Do not use unsupported bare color names such as `CYAN` unless you define them yourself.",
                 "- Never keep two dense equations in the same box at once.",
                 "- Never use `.shift()` after `place_in_box(...)` as the primary way to separate major formula groups.",
                 "- For multi-step algebra, create distinct boxes or use a vertical stack helper instead of manual offsets.",
+                "- Do not build brace labels with `next_to(...)` and then move the entire brace+label group into another box. Build braces from an already-positioned equation and place labels in a dedicated coefficient or annotation box.",
                 "- Do not use indexed submobject transforms between long formulas when a full-group replacement is safer.",
                 "- Add helpers such as `stack_in_box(...)`, `replace_in_box(...)`, or equivalent safe layout utilities.",
                 "- Avoid primary layout via chained relative positioning like repeated .shift() or .next_to() for major scene structure.",
@@ -933,7 +976,8 @@ class MathematicalReasoner:
                 "pattern with VoiceoverScene, CoquiService, AudioSegment.converter = imageio_ffmpeg.get_ffmpeg_exe(), "
                 "and with self.voiceover(...) blocks. It must also include helper methods equivalent to fit_to_box, "
                 "keep_inside_box, place_in_box, mobjects_overlap, and resolve_overlap, and must use resolve_overlap "
-                "as a final safety step where crowding could occur."
+                "as a final safety step where crowding could occur. Add concise humanlike comments before major "
+                "scene sections and any non-obvious layout or animation choices."
             ),
             max_tokens=int(self.config.get("manim_layout_refiner_max_tokens", 8192)),
             model_name=self.manim_layout_refiner_model,
@@ -959,6 +1003,7 @@ class MathematicalReasoner:
         solution: Dict[str, Any],
         scene_planner: Dict[str, Any],
     ) -> Dict[str, Any]:
+        # We let the first codegen pass try its best, then automatically escalate to the layout refiner when the script looks risky.
         total_start = perf_counter()
         rag_context = self.manim_kb.retrieve_for_manim_code(parsed_input, solution, scene_planner)
         prompt = self.prepare_manim_code_prompt(parsed_input, solution, scene_planner, rag_context)

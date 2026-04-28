@@ -16,6 +16,15 @@ Strict no-overlap rules for generated Manim code:
 - If a formula exceeds about 80 percent of the available box width, split it into two or more lines.
 - Use a helper such as `stack_in_box(...)` or `multiline_formula(...)`.
 
+4b. Every transformed formula state must be placed before animation.
+- If `step1`, `step2`, `eq_standard`, or similar mobjects are used in `FadeIn`, `Transform`, or `ReplacementTransform`, each one must be explicitly placed in its destination box before it is animated.
+- Do not assume a newly created `MathTex` will inherit the correct layout just because it is part of a transform chain.
+
+4c. Brace annotations need their own band.
+- Do not keep braces, coefficient labels, and a dense equation in the same visual band.
+- Build braces from the already-positioned equation, then place labels in a dedicated annotation box or separate horizontal row.
+- Avoid `next_to(...)` on brace labels followed by moving the entire brace+label group into another box.
+
 5. Add dedicated helpers for formula layout.
 - `stack_in_box(mobs, box, gap=...)`
 - `replace_in_box(old_mob, new_mob, box, ...)`

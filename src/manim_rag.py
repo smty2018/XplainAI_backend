@@ -71,6 +71,7 @@ class ManimKnowledgeBase:
     VERSION = "manim-rag-v1"
 
     def __init__(self, project_root: Path, config: Dict[str, Any]) -> None:
+        # This KB is intentionally local-first: prompt assets + scraped docs/examples + a simple embedding path that works offline.
         self.project_root = Path(project_root)
         self.config = dict(config or {})
         self.enabled = bool(self.config.get("manim_rag_enabled", True))
@@ -105,6 +106,7 @@ class ManimKnowledgeBase:
         self.sync_index()
 
     def sync_index(self) -> Dict[str, Any]:
+        # Sync is idempotent on purpose so we can call it from app startup without worrying about duplicate chunks.
         if not self.enabled or self._collection is None:
             self._last_sync_stats = {
                 "enabled": False,
@@ -158,6 +160,7 @@ class ManimKnowledgeBase:
         parsed_input: Dict[str, Any],
         solution: Dict[str, Any],
     ) -> Dict[str, Any]:
+        # Scene-planner retrieval leans toward pedagogy and layout patterns more than raw API syntax.
         query = self._build_scene_planner_query(parsed_input, solution)
         return self.retrieve(query, top_k=self.top_k_scene_planner, stage="scene_planner")
 
@@ -167,6 +170,7 @@ class ManimKnowledgeBase:
         solution: Dict[str, Any],
         scene_planner: Dict[str, Any],
     ) -> Dict[str, Any]:
+        # Codegen retrieval is a little more concrete: examples, implementation snippets, and safe Manim usage patterns.
         query = self._build_manim_code_query(parsed_input, solution, scene_planner)
         return self.retrieve(query, top_k=self.top_k_manim_code, stage="manim_code")
 
@@ -177,6 +181,7 @@ class ManimKnowledgeBase:
         top_k: int = 4,
         stage: str = "general",
     ) -> Dict[str, Any]:
+        # We over-fetch first, then rerank/dedupe so the final prompt gets a small but diverse set of useful snippets.
         if not self.enabled or self._collection is None:
             return {
                 "enabled": False,

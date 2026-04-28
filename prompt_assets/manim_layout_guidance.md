@@ -40,6 +40,9 @@ Budget width and height for graphs, braces, formulas, labels, and final answer b
 - Never keep two dense equations in the same box at the same time.
 - Never rely on `.shift()` after `place_in_box(...)` to create a stacked formula layout.
 - Instead, create separate formula boxes or a vertical stack helper that arranges formulas inside one parent box.
+- Every major equation state that appears in `FadeIn`, `Transform`, or `ReplacementTransform` must be placed in its destination box before the animation begins.
+- If braces or coefficient labels are needed, reserve a separate annotation band below or beside the equation instead of attaching them inside the same dense formula box.
+- Do not create braces and labels with `next_to(...)` and then move the whole brace+label group into another box; build the braces from the already-positioned equation and place the labels in their own box or row.
 - Avoid partial indexed transforms between long `MathTex` expressions; use full-group replacements.
 
 Core rule:

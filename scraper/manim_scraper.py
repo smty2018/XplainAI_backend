@@ -54,6 +54,8 @@ class ManimKnowledgeScraper:
         max_doc_pages: int = 250,
         max_example_files: int = 200,
     ) -> Dict[str, Any]:
+        # One manifest makes it easy to inspect exactly what fed the KB after a
+        # scrape, especially when we rerun the crawler with larger limits.
         self._ensure_dirs()
         docs_result = self.scrape_docs(doc_seed_urls or DEFAULT_DOC_SEEDS, max_pages=max_doc_pages)
         github_result = self.scrape_github_examples(github_tree_url, max_files=max_example_files)
@@ -90,6 +92,8 @@ class ManimKnowledgeScraper:
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 output_path.write_text(markdown, encoding="utf-8")
                 written.append(str(output_path))
+                # The example gallery page is much more valuable when we split
+                # it into per-example assets instead of leaving one giant blob.
                 if url.rstrip("/").endswith("/examples.html"):
                     gallery_files.extend(self._write_gallery_assets(markdown, source_url=url))
 
@@ -112,6 +116,8 @@ class ManimKnowledgeScraper:
         pending: deque[str] = deque([base_path])
         written: List[str] = []
 
+        # We walk the GitHub contents API breadth-first so nested folders stay
+        # discoverable without needing a custom recursive endpoint.
         while pending and len(written) < max_files:
             current_path = pending.popleft()
             api_url = self._github_contents_api_url(owner, repo, current_path, ref)
@@ -224,6 +230,8 @@ class ManimKnowledgeScraper:
         if container is None:
             return title, "", []
 
+        # We strip obvious chrome here so the KB stores article content rather
+        # than navigation, buttons, and theme furniture.
         for tag in list(container.select("script, style, nav, aside, footer, button, form")):
             tag.decompose()
 
@@ -407,6 +415,8 @@ class ManimKnowledgeScraper:
         current_category = "Uncategorized"
         index = 0
 
+        # At this point the docs page is already flattened to markdown, so we
+        # rebuild structure using the gallery's headings and "Example:" labels.
         while index < len(lines):
             raw_line = lines[index].strip()
             if raw_line.startswith("## "):
@@ -523,6 +533,7 @@ def main() -> None:
         max_doc_pages=args.max_doc_pages,
         max_example_files=args.max_example_files,
     )
+    # Printing the manifest keeps ad-hoc local runs easy to sanity-check.
     print(json.dumps(manifest, indent=2, ensure_ascii=False))
 
 

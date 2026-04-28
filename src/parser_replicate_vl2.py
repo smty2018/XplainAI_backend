@@ -38,6 +38,8 @@ class ReplicateDeepSeekVL2Parser(LocalParser):
         config_path: str = "config/config.yaml",
         api_token: Optional[str] = None,
     ):
+        # The local parser prints a lot of setup noise; we reuse its schema and
+        # normalization logic, but keep startup quiet for the hosted path.
         with redirect_stdout(io.StringIO()):
             super().__init__(config_path)
 
@@ -89,6 +91,8 @@ class ReplicateDeepSeekVL2Parser(LocalParser):
         self._safe_print("Replicate-hosted DeepSeek-VL2 will be called on demand.")
 
     def _resolve_api_token(self, explicit_token: Optional[str]) -> str:
+        # We accept a few historical env var names so older local setups keep
+        # working without forcing everyone to rename secrets immediately.
         token = (
             explicit_token
             or os.getenv("REPLICATE_API_TOKEN")
@@ -217,6 +221,8 @@ class ReplicateDeepSeekVL2Parser(LocalParser):
         last_payload = b""
         last_quality = 0
 
+        # Replicate wants a single inline image payload, so we progressively
+        # trade JPEG quality and resolution until the request fits the limit.
         for _ in range(6):
             for quality in (80, 70, 60, 50, 40, 30):
                 buffer = io.BytesIO()
@@ -317,6 +323,8 @@ class ReplicateDeepSeekVL2Parser(LocalParser):
 
         deadline = perf_counter() + self.api_timeout_seconds
         current = prediction
+        # Replicate is asynchronous, so this loop is the hosted equivalent of
+        # waiting on a local model call to finish.
         while perf_counter() < deadline:
             time.sleep(self.poll_interval_seconds)
             current = self._request_json(poll_url)
@@ -1024,6 +1032,8 @@ class ReplicateDeepSeekVL2Parser(LocalParser):
             f"Query: {text}"
         )
 
+        # Replicate's VL2 endpoint still expects an image-oriented multimodal
+        # interface, so we render plain text onto a clean canvas first.
         text_image = self._text_to_image(text)
         response, model_timing = self._run_vl2(
             prompt,
@@ -1067,6 +1077,8 @@ class ReplicateDeepSeekVL2Parser(LocalParser):
         supplemental_parts = []
         if user_prompt:
             supplemental_parts.append(user_prompt)
+        # The supplemental text gives normalization a second chance to recover
+        # formulas or labels that were visible but not structured perfectly.
         visual_text = self._visual_support_text_from_result(model_result)
         if visual_text:
             supplemental_parts.append(visual_text)
@@ -1177,6 +1189,8 @@ class ReplicateDeepSeekVL2Parser(LocalParser):
         if not images:
             return {"error": f"No PDF pages available for {pdf_full_path}"}
 
+        # The hosted parser only sees one image input, so we stitch pages into a
+        # single reading-order canvas and keep the text layer as a side hint.
         prompt = (
             "Analyze this <image> and respond with valid JSON only.\n"
             "Return ONLY these keys: intent, topic, domain, complexity, language, key_concepts, equations, "

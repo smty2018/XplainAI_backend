@@ -34,9 +34,13 @@ class FakeSession:
 
 class ManimScraperTests(unittest.TestCase):
     def setUp(self):
+        # The scraper writes a lot of files, so every test gets its own isolated
+        # workspace instead of sharing a fixture tree.
         self.temp_dir = Path(tempfile.mkdtemp(prefix="manim_scraper_test_"))
 
     def _make_scraper(self, mapping):
+        # Most tests use a fake session so we can exercise the crawl logic
+        # deterministically without depending on network availability.
         session = FakeSession(mapping)
         return ManimKnowledgeScraper(output_dir=self.temp_dir / "scraped", session=session)
 
@@ -244,6 +248,8 @@ class BraceAnnotation(Scene):
         self.add(Brace(Line(LEFT, RIGHT)))
 ```
 """
+        # The first fenced block is intentionally junky; the parser should keep
+        # the real Python example instead of the broken tokenized snippet.
         examples = scraper._split_example_gallery_markdown(markdown)
         self.assertEqual(len(examples), 2)
         self.assertEqual(examples[0]["name"], "ManimCELogo")

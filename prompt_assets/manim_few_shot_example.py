@@ -23,6 +23,7 @@ def layout_box(x, y, width, height):
 
 
 SCENE1_BOXES = {
+    # Keep the early scene roomy so the formula and graph never compete for space.
     "title": layout_box(0.0, 3.1, 11.5, 0.45),
     "subtitle": layout_box(0.0, 2.4, 11.5, 0.40),
     "formula": layout_box(0.0, 1.7, 11.0, 0.95),
@@ -33,6 +34,7 @@ SCENE1_BOXES = {
 
 
 class BoxLayoutScene(VoiceoverScene):
+    # Scale first, then clamp. That keeps layout predictable across very different prompts.
     def fit_to_box(self, mob, box, pad_x=0.10, pad_y=0.08, allow_upscale=False):
         avail_width = max(0.2, box["width"] - 2 * pad_x)
         avail_height = max(0.2, box["height"] - 2 * pad_y)
@@ -129,6 +131,7 @@ class BoxLayoutScene(VoiceoverScene):
             CoquiService(model_name="tts_models/en/vctk/vits", speaker_idx=7)
         )
 
+        # Start with the headline elements locked into their own bands.
         title = Text("Example Title", font_size=40, weight=BOLD)
         subtitle = Text("Subtitle", font_size=26, color=SYSTEM_COLOR)
         formula = MathTex(r"y(t)=2u(t+2)-3u(t+1)+u(t-2)")
@@ -146,12 +149,14 @@ class BoxLayoutScene(VoiceoverScene):
             tips=False,
         ).move_to(SCENE1_BOXES["graph"]["center"])
 
+        # Small callouts get their own corner box instead of sitting on top of the graph.
         callout = Text("Important note", font_size=20, color=YELLOW)
         self.place_in_box(callout, SCENE1_BOXES["callout_right"])
 
         result = Text("Energy = 7", font_size=34, color=WHITE)
         self.place_in_box(result, SCENE1_BOXES["final_answer"])
 
+        # Fade-based swaps are safer here than an in-place transform in a crowded formula band.
         with self.voiceover(text="Demonstrate the box-based layout system.") as tracker:
             self.play(Write(title), FadeIn(subtitle), FadeIn(formula))
             self.play(self.replace_in_box(formula, formula_next, SCENE1_BOXES["formula"]))

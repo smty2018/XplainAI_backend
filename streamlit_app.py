@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -38,11 +39,13 @@ RENDER_QUALITIES = {
 
 @st.cache_resource(show_spinner=False)
 def get_orchestrator() -> SolutionOrchestrator:
+    # Keep one orchestrator around so Streamlit reruns do not rebuild the whole pipeline stack every click.
     return SolutionOrchestrator("config/config.yaml")
 
 
 @st.cache_resource(show_spinner=False)
 def get_replicate_parser() -> ReplicateDeepSeekVL2Parser:
+    # The parser also has setup cost, so we cache it the same way as the orchestrator.
     return ReplicateDeepSeekVL2Parser("config/config.yaml")
 
 
@@ -80,8 +83,63 @@ def persist_bundle(output: Dict[str, Any]) -> None:
     )
 
 
+def sanitize_generated_manim_code(code: str) -> str:
+    # Models sometimes return good Python wrapped in markdown fences or with stray preamble text.
+    # We normalize that here so the render path always works with a clean script body.
+    value = strip_manim_runtime_compatibility(str(code or ""))
+    value = value.lstrip("\ufeff").strip()
+    if not value:
+        return ""
+
+    fenced_blocks = re.findall(
+        r"```(?:python)?\s*(.*?)```",
+        value,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    if fenced_blocks:
+        value = max(
+            fenced_blocks,
+            key=lambda block: (
+                int("from manim" in block or "class " in block),
+                len(block),
+            ),
+        ).strip()
+
+    value = re.sub(r"(?im)^\s*```(?:python)?\s*$", "", value)
+    value = re.sub(r"(?im)^\s*```\s*$", "", value)
+
+    lines = value.splitlines()
+    start_markers = (
+        "from ",
+        "import ",
+        "class ",
+        "def ",
+        "@",
+        "#",
+        '"""',
+        "'''",
+        "try:",
+        "if ",
+        "for ",
+        "while ",
+    )
+    start_index = 0
+    for index, line in enumerate(lines):
+        stripped = line.lstrip()
+        if not stripped:
+            continue
+        if any(stripped.startswith(marker) for marker in start_markers) or re.match(
+            r"[A-Za-z_]\w*\s*=",
+            stripped,
+        ):
+            start_index = index
+            break
+    value = "\n".join(lines[start_index:]).strip()
+    return value
+
+
 def persist_current_code(output: Dict[str, Any], code: str) -> Path:
-    code = strip_manim_runtime_compatibility(code)
+    code = sanitize_generated_manim_code(code)
     current_code_path = Path(output["current_code_path"])
     current_code_path.write_text(code.rstrip() + "\n", encoding="utf-8")
     output["pipeline_result"].setdefault("manim_code", {})["text"] = code
@@ -102,6 +160,7 @@ def render_pdf_preview(uploaded_file: Any) -> Optional[Image.Image]:
 
 
 def detect_scene_classes(code: str) -> List[str]:
+    # We intentionally prefer the leaf scene the user expects to watch, not a helper base scene.
     try:
         tree = ast.parse(code)
     except SyntaxError:
@@ -192,10 +251,12 @@ def detect_scene_classes(code: str) -> List[str]:
 
 
 def compile_python_script(script_path: Path) -> None:
+    # Failing fast with py_compile gives a much clearer error than letting Manim crash later.
     compile_cmd = [sys.executable, "-m", "py_compile", str(script_path)]
     compile_result = subprocess.run(
         compile_cmd,
         cwd=PROJECT_ROOT,
+        env=build_python_subprocess_env(),
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -210,6 +271,7 @@ def compile_python_script(script_path: Path) -> None:
 
 
 def build_manim_compatibility_preamble() -> str:
+    # This runtime shim is our "last mile" safety net for small generation mistakes and Windows quirks.
     color_aliases = {
         "CYAN": "#00BCD4",
         "AQUA": "#00BCD4",
@@ -217,6 +279,14 @@ def build_manim_compatibility_preamble() -> str:
     }
     lines = [
         "# XplainAI Manim runtime compatibility aliases",
+        "try:",
+        "    import sys as _xplainai_sys",
+        "    if hasattr(_xplainai_sys.stdout, 'reconfigure'):",
+        "        _xplainai_sys.stdout.reconfigure(encoding='utf-8', errors='replace')",
+        "    if hasattr(_xplainai_sys.stderr, 'reconfigure'):",
+        "        _xplainai_sys.stderr.reconfigure(encoding='utf-8', errors='replace')",
+        "except Exception:",
+        "    pass",
         "try:",
         "    from pydub import AudioSegment as _XplainAIAudioSegment",
         "    import imageio_ffmpeg as _xplainai_imageio_ffmpeg",
@@ -441,6 +511,15 @@ def build_skip_sections_preamble(skip_before_section_index: int) -> str:
     )
 
 
+def build_python_subprocess_env() -> Dict[str, str]:
+    # Voiceover/TTS libraries can be surprisingly sensitive to Windows console encodings.
+    # Forcing UTF-8 here keeps punctuation-heavy narration from crashing the render subprocess.
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
+    return env
+
+
 def is_valid_video_clip(video_path: Path) -> bool:
     return (
         video_path.exists()
@@ -491,12 +570,13 @@ def render_manim_video(
     save_sections: bool = True,
     skip_before_section_index: Optional[int] = None,
 ) -> Dict[str, Any]:
+    # Every render gets an isolated scratch folder so fresh renders and rerenders never clobber each other.
     render_dir = make_render_dir(run_dir, render_label)
     media_dir = render_dir / "media"
     media_dir.mkdir(parents=True, exist_ok=True)
 
     base_script_path = render_dir / "generated_scene.py"
-    compatible_code = apply_manim_runtime_compatibility(code)
+    compatible_code = apply_manim_runtime_compatibility(sanitize_generated_manim_code(code))
     base_script_path.write_text(compatible_code, encoding="utf-8")
 
     render_script_path = base_script_path
@@ -509,7 +589,8 @@ def render_manim_video(
 
     compile_python_script(render_script_path)
 
-    scene_classes = detect_scene_classes(code)
+    # Detect the scene from the original generated code, not from the compatibility-patched wrapper file.
+    scene_classes = detect_scene_classes(sanitize_generated_manim_code(code))
     if not scene_classes:
         raise RuntimeError("Could not find a Manim scene class in the generated code.")
 
@@ -534,6 +615,7 @@ def render_manim_video(
     render_result = subprocess.run(
         render_cmd,
         cwd=PROJECT_ROOT,
+        env=build_python_subprocess_env(),
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -584,6 +666,7 @@ def render_manim_video(
 
 
 def stitch_videos(video_paths: List[Path], output_path: Path) -> Path:
+    # Partial rerenders only feel fast if we can stitch the untouched prefix back onto the new suffix safely.
     valid_paths = [path for path in video_paths if is_valid_video_clip(path)]
     if not valid_paths:
         raise RuntimeError("No valid video clips were available for stitching.")
@@ -705,6 +788,7 @@ def rerender_edited_video(
     rerender_mode: str,
     section_index: Optional[int] = None,
 ) -> Dict[str, Any]:
+    # Section rerenders are the fast path, but we fall back to a full render whenever the saved clip boundaries look unsafe.
     run_dir = Path(output["run_dir"])
     current_render = output.get("render_result") or {}
     existing_sections = list(current_render.get("sections") or [])
@@ -807,6 +891,7 @@ def run_pipeline(
     uploaded_file: Any = None,
     progress_callback: Optional[Callable[[str, str], None]] = None,
 ) -> Dict[str, Any]:
+    # This is the main app pipeline: save input, parse it, reason over it, verify it, then optionally render the Manim result.
     orchestrator = get_orchestrator()
     run_label = uploaded_file.name if uploaded_file is not None else (text_input[:32] or "text")
     run_dir = make_run_dir(run_label)
@@ -852,6 +937,7 @@ def run_pipeline(
             progress_callback("parse", f"Replicate parser complete using {model_name}{suffix}.")
 
     if parsed_input is not None:
+        # If we already have fresh parser output in memory, we pass it straight through and skip a redundant parse call.
         result = orchestrator.process(
             parsed_input,
             input_type="json",
@@ -873,7 +959,10 @@ def run_pipeline(
             progress_callback=progress_callback,
         )
 
-    current_code = str((result.get("manim_code") or {}).get("text", "")).strip()
+    current_code = sanitize_generated_manim_code(
+        str((result.get("manim_code") or {}).get("text", ""))
+    )
+    result.setdefault("manim_code", {})["text"] = current_code
     current_code_path = run_dir / "current_generated_scene.py"
     current_code_path.write_text(current_code + ("\n" if current_code else ""), encoding="utf-8")
     if progress_callback is not None:
