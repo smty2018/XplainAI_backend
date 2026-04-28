@@ -24,9 +24,10 @@ logger = logging.getLogger(__name__)
 
 
 class LocalParser:
-    """Local parser backed by DeepSeek-VL2 Tiny only."""
+    """Turn raw text, images, or PDFs into one normalized problem description."""
 
     def __init__(self, config_path: str = "config/config.yaml"):
+        # Centralize setup here so the parsing methods can focus on extraction and normalization.
         self.project_root = Path(__file__).parent.parent
         self._safe_print(f"Project root: {self.project_root}")
 
@@ -58,8 +59,7 @@ class LocalParser:
         self.processor = None
         self.tokenizer = None
         self.last_timing: Dict[str, Union[str, float, bool]] = {}
-        # These domain cues are deliberately broad because we use them to steer
-        # the first-pass parser prompt, not to make a final hard classification.
+        # These domain cues guide the initial parser prompt and are not treated as a final classification.
         self.domain_terms = {
             "physics": [
                 "quantum mechanics",
@@ -370,8 +370,7 @@ class LocalParser:
 
     def _finalize_result(self, result: Dict) -> Dict:
         """Save a result after all metadata has been attached."""
-        # Verification and retrieval targeting now happen downstream. We still
-        # infer them internally, but we keep the public parser payload cleaner.
+        # Verification and retrieval targeting are inferred downstream and omitted from the public parser payload.
         result.pop("verification_targets", None)
         result.pop("retrieval_targets", None)
         self.last_timing = result.get("_timing", {})
@@ -1493,8 +1492,7 @@ class LocalParser:
         page_count: int = 0,
     ) -> Dict[str, Any]:
         """Normalize the output into a single rich schema."""
-        # Every backend eventually lands here, so this function is where we make
-        # the rest of the pipeline see one consistent parser shape.
+        # Normalize all parser backends into a single result schema for downstream stages.
         input_result = dict(result) if isinstance(result, dict) else {}
         base = self._build_base_result(input_type)
         normalized = dict(base)
@@ -1840,8 +1838,7 @@ class LocalParser:
             f"Query: {text}"
         )
 
-        # For raw text inputs we let the model stay text-only; the visual
-        # backends are reserved for images/PDFs where OCR and layout matter.
+        # Text inputs use the text-only path; visual backends are reserved for OCR and layout-sensitive inputs.
         response, model_timing = self._run_vl2(
             prompt,
             max_new_tokens=self.config.get("max_new_tokens_text", 320),
@@ -1878,8 +1875,7 @@ class LocalParser:
         supplemental_parts = []
         if user_prompt:
             supplemental_parts.append(user_prompt)
-        # We fold the model's own OCR-ish text back into normalization so later
-        # stages have one place to look for visible labels and formulas.
+        # Merge extracted visible text into the normalized result for downstream consumers.
         visual_text = self._visual_text_from_result(model_result)
         if visual_text:
             supplemental_parts.append(visual_text)
@@ -1953,8 +1949,7 @@ class LocalParser:
             self._safe_print(f"Limiting to first {max_pages} pages")
             images = images[:max_pages]
 
-        # PDFs get the same normalized schema as every other input, but we keep
-        # the text layer around as a helpful fallback when OCR misses something.
+        # Preserve the document text layer as a fallback while keeping the normalized output schema consistent.
         prompt = (
             "Analyze this document and respond with valid JSON only.\n"
             "Return ONLY these keys: intent, topic, domain, complexity, language, key_concepts, equations, "

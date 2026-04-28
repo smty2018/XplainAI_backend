@@ -1,3 +1,5 @@
+"""Tests for the local Chroma-backed Manim knowledge base."""
+
 import importlib.util
 import tempfile
 import sys
@@ -7,6 +9,7 @@ from chromadb.api.client import SharedSystemClient
 
 
 def load_manim_rag_module():
+    """Import the Manim RAG module directly from the repository path."""
     # The tests import the module by path so they stay stable even if the repo
     # isn't installed as a package in the active environment.
     root = Path(__file__).resolve().parents[1]
@@ -20,8 +23,11 @@ def load_manim_rag_module():
 
 
 class TestManimKnowledgeBase(unittest.TestCase):
+    """Check that indexing and retrieval work against the local seed corpus."""
+
     @classmethod
     def setUpClass(cls):
+        # Use a temporary Chroma directory so local developer data never affects these assertions.
         cls.root = Path(__file__).resolve().parents[1]
         cls.module = load_manim_rag_module()
         cls.persist_dir = Path(tempfile.mkdtemp(prefix="test_chroma_manim_kb_"))
@@ -52,6 +58,7 @@ class TestManimKnowledgeBase(unittest.TestCase):
         cls.kb = None
 
     def test_index_has_seed_documents(self):
+        """The seed corpus should produce a non-empty index."""
         # This is the first guardrail: if the seed corpus never indexed, the
         # retrieval quality tests below are not worth trusting.
         status = self.kb.get_status()
@@ -60,6 +67,7 @@ class TestManimKnowledgeBase(unittest.TestCase):
         self.assertGreater(status["chunk_count"], 0)
 
     def test_voiceover_query_returns_narration_guidance(self):
+        """Narration queries should pull voiceover-related material."""
         result = self.kb.retrieve(
             "Need VoiceoverScene CoquiService AudioSegment next_section narration guidance",
             top_k=3,
@@ -70,6 +78,7 @@ class TestManimKnowledgeBase(unittest.TestCase):
         self.assertTrue("coquiservice" in combined or "audiosegment" in combined or "next_section" in combined)
 
     def test_layout_query_returns_overlap_guidance(self):
+        """Layout queries should pull overlap-avoidance guidance."""
         result = self.kb.retrieve(
             "Need box layout place_in_box resolve_overlap no overlap guidance",
             top_k=3,
@@ -79,6 +88,7 @@ class TestManimKnowledgeBase(unittest.TestCase):
         self.assertTrue("resolve_overlap" in combined or "place_in_box" in combined)
 
     def test_graph_query_returns_axes_patterns(self):
+        """Graph queries should return axes or plotting references."""
         result = self.kb.retrieve(
             "Need axes plot graph vertex dashed lines annotations for a quadratic scene",
             top_k=3,
@@ -88,6 +98,7 @@ class TestManimKnowledgeBase(unittest.TestCase):
         self.assertTrue("axes" in combined or "plot" in combined or "graph" in combined)
 
     def test_scene_planner_retrieval_uses_problem_context(self):
+        """Scene-planner retrieval should include the parsed problem context in its query."""
         parsed_input = {
             "topic": "quadratic equations",
             "domain": "mathematics",
@@ -105,6 +116,7 @@ class TestManimKnowledgeBase(unittest.TestCase):
         self.assertIn("quadratic equations", result["query"].lower())
 
     def test_manim_code_retrieval_prefers_code_or_examples(self):
+        """Code-generation retrieval should favor concrete code or examples."""
         # The codegen stage should lean toward concrete example snippets, not
         # just prose guidance, because that tends to produce more runnable output.
         parsed_input = {

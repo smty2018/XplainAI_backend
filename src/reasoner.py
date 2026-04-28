@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 
 
 class SolutionStyle(Enum):
+    """Describe the explanation style requested from the reasoning model."""
+
     STEP_BY_STEP = "step_by_step"
     CONCEPT_FIRST = "concept_first"
     DERIVATION_FOCUSED = "derivation_focused"
@@ -35,10 +37,10 @@ class SolutionStyle(Enum):
 
 
 class MathematicalReasoner:
-    """Generate structured math and physics solutions from parsed input."""
+    """Generate solutions, scene plans, and Manim code from parsed input."""
 
     def __init__(self, config_path: str = "config/config.yaml"):
-        # One place to wire models, prompt assets, cache paths, and the Manim RAG helper together.
+        # Initialize shared model, prompt, cache, and retrieval configuration.
         self.project_root = Path(__file__).parent.parent
         self.config = self._load_config(config_path)
         load_dotenv(self.project_root / ".env")
@@ -724,6 +726,210 @@ class MathematicalReasoner:
 
         return False
 
+    def _manim_code_has_graph_region_risk(self, code: str) -> bool:
+        value = str(code or "")
+        if not value.strip():
+            return True
+
+        function_graph_vars = set(
+            re.findall(r"(?m)^\s*([A-Za-z_]\w*)\s*=\s*axes\.plot\(", value)
+        )
+        parametric_graph_vars = set(
+            re.findall(
+                r"(?m)^\s*([A-Za-z_]\w*)\s*=\s*(?:ParametricFunction|axes\.plot_parametric)\(",
+                value,
+            )
+        )
+
+        for area_target in re.findall(r"get_area\(\s*([A-Za-z_]\w*)\s*,", value):
+            if area_target in parametric_graph_vars:
+                return True
+            if function_graph_vars and area_target not in function_graph_vars:
+                lowered = area_target.lower()
+                if any(token in lowered for token in ("arc", "circle", "curve", "boundary")):
+                    return True
+
+        # A diagonal close-out is usually a sign that a bounded region is being shaded by the wrong boundary.
+        if "get_area(" in value and re.search(r"\b(?:arc|circle)\b", value, flags=re.IGNORECASE):
+            if any(token in value for token in ("first quadrant", "x-axis", "under the curve")):
+                return True
+
+        return False
+
+    def _manim_code_has_readability_risk(self, code: str) -> bool:
+        value = str(code or "")
+        if not value.strip():
+            return True
+
+        def _extract_layout_boxes() -> Dict[str, Tuple[float, float]]:
+            boxes: Dict[str, Tuple[float, float]] = {}
+            for name, width, height in re.findall(
+                r"(?m)^\s*([A-Za-z_]\w*)\s*=\s*layout_box\(\s*[^,\n]+,\s*[^,\n]+,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*\)",
+                value,
+            ):
+                boxes[name] = (float(width), float(height))
+
+            for dict_name, body in re.findall(
+                r"(?ms)^\s*([A-Za-z_]\w*)\s*=\s*\{(.*?)^\s*\}",
+                value,
+            ):
+                for key, width, height in re.findall(
+                    r"""["']([^"']+)["']\s*:\s*layout_box\(\s*[^,\n]+,\s*[^,\n]+,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*\)""",
+                    body,
+                ):
+                    boxes[f'{dict_name}["{key}"]'] = (float(width), float(height))
+                    boxes[f"{dict_name}['{key}']"] = (float(width), float(height))
+            return boxes
+
+        layout_boxes = _extract_layout_boxes()
+
+        explicit_sizes = [
+            (name.lower(), int(size))
+            for name, size in re.findall(
+                r"(?m)^\s*([A-Za-z_]\w*)\s*=\s*(?:MathTex|Tex|Text)\([^\n]*?font_size\s*=\s*(\d+)",
+                value,
+            )
+        ]
+        for name, size in explicit_sizes:
+            if size >= 28:
+                continue
+            if any(token in name for token in ("axis", "tick", "marker", "tiny", "minor")):
+                continue
+            return True
+
+        small_size_calls = [
+            int(size)
+            for size in re.findall(r"(?:MathTex|Tex|Text)\([^\n]*?font_size\s*=\s*(\d+)", value)
+            if int(size) < 28
+        ]
+        if len(small_size_calls) >= 3:
+            return True
+
+        if re.search(r"too small", value, flags=re.IGNORECASE):
+            return True
+
+        placement_box_names = {
+            str(raw_box).strip().casefold()
+            for raw_box in re.findall(r"place_in_box\(\s*[A-Za-z_]\w*\s*,\s*([^\),]+)", value)
+        }
+        placement_box_names.update(
+            str(raw_box).strip().casefold()
+            for raw_box in re.findall(
+                r"add_with_overlap_protection\(\s*[A-Za-z_]\w*\s*,\s*[A-Za-z_]\w*\s*,\s*([^\),]+)",
+                value,
+            )
+        )
+        for box_name in placement_box_names:
+            dimensions = layout_boxes.get(box_name)
+            if not dimensions:
+                continue
+            width, height = dimensions
+            if any(token in box_name for token in ("answer", "result", "summary", "conclusion")):
+                if height < 1.0:
+                    return True
+                if width < 5.5:
+                    return True
+            if any(token in box_name for token in ("title", "subtitle", "problem", "caption", "note")):
+                if height < 0.7:
+                    return True
+
+        for _name, items_blob, box_name in re.findall(
+            r"(?m)^\s*([A-Za-z_]\w*)\s*=\s*self\.stack_in_box\(\s*\[(.*?)\]\s*,\s*([^\),]+)",
+            value,
+            flags=re.DOTALL,
+        ):
+            dimensions = layout_boxes.get(str(box_name).strip())
+            if not dimensions:
+                continue
+            _width, height = dimensions
+            item_count = len([part for part in items_blob.split(",") if part.strip()])
+            if item_count >= 4 and height < 2.8:
+                return True
+            if item_count >= 3 and height < 2.4:
+                return True
+
+        for group_name, group_items in re.findall(
+            r"(?m)^\s*([A-Za-z_]\w*)\s*=\s*VGroup\((.*?)\)\.arrange\(DOWN",
+            value,
+        ):
+            item_count = len([part for part in group_items.split(",") if part.strip()])
+            if item_count < 2:
+                continue
+            for box_name in re.findall(
+                rf"(?:place_in_box|add_with_overlap_protection)\(\s*{re.escape(group_name)}\s*,.*?\s([A-Za-z_]\w*(?:\[[^\]]+\])?)\)",
+                value,
+            ):
+                dimensions = layout_boxes.get(str(box_name).strip())
+                if not dimensions:
+                    continue
+                _width, height = dimensions
+                if item_count >= 2 and height < 1.8:
+                    return True
+
+        return False
+
+    def _manim_code_has_scene_density_risk(self, code: str) -> bool:
+        value = str(code or "")
+        if not value.strip():
+            return True
+
+        scene_chunks = re.split(r"(?m)^\s*self\.next_section\([^\n]*\)\s*$", value)
+        if len(scene_chunks) <= 1:
+            scene_chunks = [value]
+        else:
+            scene_chunks = scene_chunks[1:]
+
+        box_patterns = [
+            r"place_in_box\(\s*[A-Za-z_]\w*\s*,\s*([^\),]+)",
+            r"add_with_overlap_protection\(\s*[A-Za-z_]\w*\s*,\s*[A-Za-z_]\w*\s*,\s*([^\),]+)",
+        ]
+        result_tokens = ("answer", "result", "final", "summary", "approx", "conclusion")
+        context_tokens = ("title", "subtitle", "caption", "note", "callout", "graph", "diagram")
+
+        for chunk in scene_chunks:
+            chunk_value = chunk.strip()
+            if not chunk_value:
+                continue
+
+            occupied_boxes: set[str] = set()
+            for pattern in box_patterns:
+                for raw_box in re.findall(pattern, chunk_value):
+                    occupied_boxes.add(str(raw_box).strip())
+
+            lowered_boxes = [box.casefold() for box in occupied_boxes]
+            has_context_box = any(
+                any(token in box_name for token in context_tokens) for box_name in lowered_boxes
+            )
+            has_result_box = any(
+                any(token in box_name for token in result_tokens) for box_name in lowered_boxes
+            )
+            has_large_visual = any(
+                marker in chunk_value
+                for marker in ("Axes(", ".plot(", "ParametricFunction(", "ImageMobject(")
+            )
+            result_like_names = [
+                name.casefold()
+                for name in re.findall(
+                    r"(?m)^\s*([A-Za-z_]\w*)\s*=\s*(?:MathTex|Tex|Text)\(",
+                    chunk_value,
+                )
+                if any(token in name.casefold() for token in result_tokens)
+            ]
+
+            if has_large_visual:
+                continue
+
+            if result_like_names and re.search(r"move_to\(\s*ORIGIN\s*\)", chunk_value):
+                return True
+
+            if has_result_box and not has_context_box and len(occupied_boxes) <= 1:
+                return True
+
+            if result_like_names and not has_context_box and len(occupied_boxes) <= 1:
+                return True
+
+        return False
+
     def _manim_code_has_overlap_risk(self, code: str) -> bool:
         value = str(code or "")
         if not value.strip():
@@ -757,6 +963,11 @@ class MathematicalReasoner:
             r"Transform\(\s*[A-Za-z_][\w]*\[\d+\]\s*,\s*[A-Za-z_][\w]*\[\d+\]",
             r"place_in_box\([^\n]+\)\s*\n\s*[A-Za-z_][\w]*\.shift\(",
             r"\.shift\((?:UP|DOWN)\s*\*\s*[0-9.]+\)",
+            r"\.plot_parametric\(",
+            r"get_(?:vertical|horizontal)_line\([\s\S]{0,160}?stroke_opacity\s*=",
+            r"MathTex\([^\n]*weight\s*=",
+            r"Tex\([^\n]*weight\s*=",
+            r"else\s+None",
         ]
         if any(re.search(pattern, value, flags=re.MULTILINE) for pattern in risky_patterns):
             return True
@@ -785,6 +996,12 @@ class MathematicalReasoner:
         if value.count("place_in_box(") >= 3 and "resolve_overlap(" not in value:
             return True
         if self._box_reuse_has_stale_content_risk(value):
+            return True
+        if self._manim_code_has_graph_region_risk(value):
+            return True
+        if self._manim_code_has_readability_risk(value):
+            return True
+        if self._manim_code_has_scene_density_risk(value):
             return True
         return False
 
@@ -959,8 +1176,22 @@ class MathematicalReasoner:
                 "- Apply this layout order: fixed scene boxes first, fit each object to its box, clamp inside the box, collision-check as a final pass.",
                 "- Enforce a strict no-overlap policy for all visible major objects.",
                 "- For graph scenes, draw and label the axes clearly. If you use `Axes`, include visible x-axis and y-axis labels such as `x` and `y` unless the problem context requires different symbols.",
+                "- Do not call `axes.plot_parametric(...)` on `Axes`; for circles or other parametric curves, use `ParametricFunction(lambda t: axes.c2p(x(t), y(t)), t_range=[...])` or another Manim Community Edition-safe pattern.",
+                "- Do not return `None` from plotting lambdas. Restrict the plotted domain with `x_range=[...]`, split the curve into valid pieces, or use a mathematically valid fallback such as `np.nan` only when necessary.",
+                "- Do not pass `stroke_opacity=...` directly into `axes.get_vertical_line(...)` or `axes.get_horizontal_line(...)`. Create the line first, then style it with `set_stroke(opacity=...)` if needed.",
                 "- If the math references vertical boundaries like `x = 1` or `x = 4`, draw those actual boundary lines at the correct locations instead of showing only floating text labels.",
                 "- When shading a bounded area, ensure the shaded region, curve, x-axis, and every stated boundary line are visually consistent and all visible at the same time.",
+                "- Use `axes.get_area(...)` only with a function graph created by `axes.plot(...)`. Do not shade an 'area under the curve' from a parametric arc or full-circle path that would close with a diagonal chord.",
+                "- If the region is described as being under a curve and above the x-axis, the lower boundary must be the x-axis, not a straight line joining the endpoints of the curve.",
+                "- Keep explanatory text and formulas readable. Do not shrink main prose, derivation lines, or answer text below roughly `font_size=28` just to force everything into one scene.",
+                "- If a derivation becomes too dense, split it across more scenes or larger boxes instead of compressing it into tiny text.",
+                "- Budget boxes from content, not the other way around. If a stack has 3 or 4 derivation lines, give it enough vertical height so `fit_to_box(...)` does not shrink everything into tiny text.",
+                "- Do not put multi-line answer cards, summary panels, or exact-form notes into very short result boxes. If a result panel has two lines or a surrounding rectangle, give it a comfortably tall box or split the content.",
+                "- For stacked derivations, plan roughly one readable text row per line. If the box cannot support that, split the scene or reduce simultaneous content instead of letting the auto-fit helper miniaturize the text.",
+                "- Do not let a scene collapse to one small leftover formula on a mostly empty frame unless it is a very brief transition beat.",
+                "- Each scene should feel intentionally occupied: either a graph/diagram fills most of one major region, or at least two purposeful regions stay active such as title plus derivation, graph plus callout, or answer plus interpretation note.",
+                "- Final answer scenes should promote the result into a clear result panel with supporting context such as a title, label, exact form, unit, interpretation note, or compact recap. Avoid showing only a tiny centered numeric line on a blank background.",
+                "- During derivation scenes, keep enough supporting context visible while revealing the result. Do not fade everything away and leave only one small approximation line floating alone.",
                 "- Before introducing a new major formula group into the same formula box, explicitly remove or replace the previous box occupant. Do not leave a heading, intermediate formula, or explanatory label alive underneath the next evaluation stack.",
                 "- For step-by-step evaluation scenes, replace the previous formula group with one evaluation container first, then reveal the lines inside that container. Do not stack the new lines on top of an old formula group in the same band.",
                 "- Every major formula state used in `FadeIn`, `Transform`, or `ReplacementTransform` must be explicitly placed in its destination box before the animation starts.",
@@ -983,6 +1214,8 @@ class MathematicalReasoner:
                 "- If the Scene Planner leaves a visual detail unspecified, implement the safest minimal version.",
                 "- Every `VGroup` must contain only Mobjects. Never place raw coordinates, numpy arrays, or scalar values inside `VGroup`.",
                 "- Build formula mobjects explicitly before wrapping them in `SurroundingRectangle` or grouped animations.",
+                "- Use `Text(...)` for prose titles, subtitles, and sentence-style labels. Reserve `MathTex(...)` and `Tex(...)` for mathematical notation or LaTeX content.",
+                "- Do not pass `weight=...`, `slant=...`, or font-family styling kwargs to `MathTex` or `Tex`; those belong on `Text`.",
                 "- For `Axes`, prefer `axes.get_axis_labels(...)` for readable axis labels instead of leaving the graph unlabeled.",
                 "- If you use `get_part_by_tex(...)` on `MathTex` or `Tex`, make sure the target token is isolated with `substrings_to_isolate=[...]` or use a fallback-safe highlight strategy instead of assuming the part exists.",
                 "- Before finalizing, self-check for runnable structure: valid imports, one scene class, only Mobjects in groups, no markdown fences, and no placeholder comments like TODO.",
@@ -1038,8 +1271,10 @@ class MathematicalReasoner:
                 "and with self.voiceover(...) blocks. It must also include helper methods equivalent to fit_to_box, "
                 "keep_inside_box, place_in_box, mobjects_overlap, and resolve_overlap, and must use resolve_overlap "
                 "as a final safety step where crowding could occur. When a formula box is reused across scenes, the "
-                "previous formula group must be explicitly replaced or removed before the next one is revealed. Add "
-                "concise humanlike comments before major scene sections and any non-obvious layout or animation choices."
+                "previous formula group must be explicitly replaced or removed before the next one is revealed. Fix any "
+                "incorrect shaded region so it matches the stated mathematical boundaries exactly, and enlarge or split "
+                "dense text instead of shrinking it below comfortable reading size. Add concise humanlike comments before "
+                "major scene sections and any non-obvious layout or animation choices."
             ),
             max_tokens=int(self.config.get("manim_layout_refiner_max_tokens", 8192)),
             model_name=self.manim_layout_refiner_model,
@@ -1065,7 +1300,7 @@ class MathematicalReasoner:
         solution: Dict[str, Any],
         scene_planner: Dict[str, Any],
     ) -> Dict[str, Any]:
-        # We let the first codegen pass try its best, then automatically escalate to the layout refiner when the script looks risky.
+        # Escalate to the layout refiner when the initial code generation pass appears unsafe.
         total_start = perf_counter()
         rag_context = self.manim_kb.retrieve_for_manim_code(parsed_input, solution, scene_planner)
         prompt = self.prepare_manim_code_prompt(parsed_input, solution, scene_planner, rag_context)
@@ -1233,7 +1468,7 @@ class MathematicalReasoner:
 
 
 class SolutionOrchestrator:
-    """Orchestrate parser -> reasoning pipeline."""
+    """Coordinate parsing, reasoning, verification, and downstream generation."""
 
     def __init__(self, config_path: str = "config/config.yaml"):
         self.parser = LocalParser(config_path)

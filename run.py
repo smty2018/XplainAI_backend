@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Main script to run the local parser."""
+#Main script to run the local parser
 
 import argparse
 import json

@@ -42,6 +42,8 @@ VISUAL DESIGN
 - Provide color assignments for major quantities.
 - Note annotation style, highlights, braces, boxes, shading, cursor use, or zoom behavior when helpful.
 - Keep the design intentional and instruction-ready.
+- Avoid underfilled scenes. Do not plan a moment where one small formula or number sits alone on a mostly blank frame unless it is a very brief transition.
+- Final answer moments should pair the answer with context such as a title, recap label, exact form, unit, or short interpretation note.
 
 LAYOUT AND OVERLAP PREVENTION
 - Use a box-based layout system.
@@ -52,6 +54,9 @@ LAYOUT AND OVERLAP PREVENTION
 - Avoid relying on chained relative positioning for the primary structure.
 - Prefer fade-based swaps in tight formula regions.
 - Reserve separate zones for title, subtitle, formulas, graphs, callouts, and final result.
+- Keep the frame visually occupied in a deliberate way: either one major region carries the scene strongly, or at least two purposeful regions remain active.
+- Size boxes from content density. If a scene needs a 3-line or 4-line derivation stack, the planner should reserve a tall derivation band instead of assuming the code generator can shrink the text safely.
+- Multi-line summary cards or answer panels should get enough height for readable text, padding, and highlight rectangles.
 
 TECHNICAL REQUIREMENTS
 - Target Manim Community Edition.

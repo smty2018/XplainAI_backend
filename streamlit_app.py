@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+# Streamlit frontend for the XplainAI end-to-end pipeline.
+# This module handles input collection, pipeline execution, local rendering,
+# and rerender/demo helpers for the browser UI.
+
 import ast
+import importlib.util
 import json
 import os
 import re
@@ -10,12 +15,16 @@ import sys
 from datetime import datetime
 from hashlib import md5
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import fitz
-import imageio_ffmpeg
 import streamlit as st
 from PIL import Image
+
+try:
+    import imageio_ffmpeg
+except ImportError:
+    imageio_ffmpeg = None
 
 from src.parser_replicate_vl2 import ReplicateDeepSeekVL2Parser
 from src.reasoner import SolutionOrchestrator
@@ -36,25 +45,37 @@ RENDER_QUALITIES = {
     "High": "h",
 }
 
+RENDER_MODULE_REQUIREMENTS: List[Tuple[str, str]] = [
+    ("manim", "manim"),
+    ("manim_voiceover", "manim-voiceover"),
+    ("pydub", "pydub"),
+    ("TTS", "TTS"),
+    ("imageio_ffmpeg", "imageio-ffmpeg"),
+]
+
 
 @st.cache_resource(show_spinner=False)
 def get_orchestrator() -> SolutionOrchestrator:
-    # Keep one orchestrator around so Streamlit reruns do not rebuild the whole pipeline stack every click.
+    """Return a cached orchestrator instance for the current Streamlit process."""
+    # Cache the orchestrator to avoid rebuilding pipeline dependencies on each rerun.
     return SolutionOrchestrator("config/config.yaml")
 
 
 @st.cache_resource(show_spinner=False)
 def get_replicate_parser() -> ReplicateDeepSeekVL2Parser:
-    # The parser also has setup cost, so we cache it the same way as the orchestrator.
+    """Return a cached Replicate-backed parser instance."""
+    # Cache the parser to reuse initialization work across reruns.
     return ReplicateDeepSeekVL2Parser("config/config.yaml")
 
 
 def slugify(value: str) -> str:
+    """Convert free-form text into a safe folder or file label."""
     cleaned = re.sub(r"[^a-zA-Z0-9]+", "-", value.strip().lower())
     return cleaned.strip("-") or "run"
 
 
 def make_run_dir(label: str) -> Path:
+    """Create a unique directory for one pipeline run."""
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     suffix = md5(f"{stamp}:{label}".encode("utf-8")).hexdigest()[:8]
     run_dir = STREAMLIT_RUNS_DIR / f"{stamp}_{slugify(label)}_{suffix}"
@@ -63,19 +84,73 @@ def make_run_dir(label: str) -> Path:
 
 
 def make_render_dir(run_dir: Path, label: str) -> Path:
+    """Create a unique subdirectory for one render attempt inside a run."""
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     render_dir = run_dir / "edited_renders" / f"{stamp}_{slugify(label)}"
     render_dir.mkdir(parents=True, exist_ok=True)
     return render_dir
 
 
+def get_missing_render_packages() -> List[str]:
+    """Return the Python packages required for local Manim rendering that are missing."""
+    missing: List[str] = []
+    for module_name, package_name in RENDER_MODULE_REQUIREMENTS:
+        if module_name == "imageio_ffmpeg":
+            if imageio_ffmpeg is None:
+                missing.append(package_name)
+            continue
+        if importlib.util.find_spec(module_name) is None:
+            missing.append(package_name)
+    return missing
+
+
+def ensure_local_render_environment() -> None:
+    """Raise a clear error when the active interpreter is missing render dependencies."""
+    missing = get_missing_render_packages()
+    if not missing:
+        return
+
+    install_cmd = f'"{sys.executable}" -m pip install ' + " ".join(missing)
+    raise RuntimeError(
+        "Local Manim rendering is not available in the current Python interpreter.\n"
+        f"Interpreter: {sys.executable}\n"
+        "Missing Python packages: " + ", ".join(missing) + "\n"
+        "Install them into this interpreter with:\n"
+        f"{install_cmd}"
+    )
+
+
+def get_ffmpeg_executable() -> str:
+    """Return the ffmpeg executable path exposed by imageio-ffmpeg."""
+    ensure_local_render_environment()
+    assert imageio_ffmpeg is not None
+    return imageio_ffmpeg.get_ffmpeg_exe()
+
+
+def get_tts_runtime_dirs() -> Tuple[Path, Path, Path]:
+    """Return stable directories for Coqui temp files, numba cache, and TTS data."""
+    temp_dir = PROJECT_ROOT / "tmp_numba_temp"
+    cache_dir = PROJECT_ROOT / "tmp_numba_cache"
+    local_appdata = os.environ.get("LOCALAPPDATA", "").strip()
+    if local_appdata:
+        tts_home = Path(local_appdata)
+    else:
+        tts_home = PROJECT_ROOT / "tmp_tts_home"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    tts_home.mkdir(parents=True, exist_ok=True)
+    return temp_dir, cache_dir, tts_home
+
+
 def save_uploaded_file(uploaded_file: Any, run_dir: Path) -> Path:
+    """Persist an uploaded file into the current run directory."""
     target = run_dir / uploaded_file.name
     target.write_bytes(uploaded_file.getbuffer())
     return target
 
 
 def persist_bundle(output: Dict[str, Any]) -> None:
+    """Write the current pipeline bundle to disk as JSON."""
     bundle_path = Path(output["bundle_path"])
     bundle_path.write_text(
         json.dumps(output["pipeline_result"], indent=2, ensure_ascii=False),
@@ -84,8 +159,8 @@ def persist_bundle(output: Dict[str, Any]) -> None:
 
 
 def sanitize_generated_manim_code(code: str) -> str:
-    # Models sometimes return good Python wrapped in markdown fences or with stray preamble text.
-    # We normalize that here so the render path always works with a clean script body.
+    """Clean raw model output into a plain Python script body."""
+    # Normalize generated output into a plain Python script before rendering.
     value = strip_manim_runtime_compatibility(str(code or ""))
     value = value.lstrip("\ufeff").strip()
     if not value:
@@ -135,10 +210,22 @@ def sanitize_generated_manim_code(code: str) -> str:
             start_index = index
             break
     value = "\n".join(lines[start_index:]).strip()
+    value = normalize_plot_lambda_fallbacks(value)
     return value
 
 
+def normalize_plot_lambda_fallbacks(code: str) -> str:
+    """Rewrite plot lambdas that return None outside their domain."""
+    # Replace `None` fallbacks in plotting lambdas with `np.nan` for Axes.plot compatibility.
+    return re.sub(
+        r"(=\s*lambda\b[^\n]*\belse\s+)None\b",
+        r"\1np.nan",
+        code,
+    )
+
+
 def persist_current_code(output: Dict[str, Any], code: str) -> Path:
+    """Save the latest generated Manim code and mirror it into the pipeline bundle."""
     code = sanitize_generated_manim_code(code)
     current_code_path = Path(output["current_code_path"])
     current_code_path.write_text(code.rstrip() + "\n", encoding="utf-8")
@@ -148,6 +235,7 @@ def persist_current_code(output: Dict[str, Any], code: str) -> Path:
 
 
 def render_pdf_preview(uploaded_file: Any) -> Optional[Image.Image]:
+    """Render the first PDF page as an image for the Streamlit preview panel."""
     try:
         document = fitz.open(stream=uploaded_file.getvalue(), filetype="pdf")
         if document.page_count == 0:
@@ -160,7 +248,8 @@ def render_pdf_preview(uploaded_file: Any) -> Optional[Image.Image]:
 
 
 def detect_scene_classes(code: str) -> List[str]:
-    # We intentionally prefer the leaf scene the user expects to watch, not a helper base scene.
+    """Return scene class names, preferring concrete leaf scenes."""
+    # Prefer concrete leaf scenes over helper base classes.
     try:
         tree = ast.parse(code)
     except SyntaxError:
@@ -251,7 +340,8 @@ def detect_scene_classes(code: str) -> List[str]:
 
 
 def compile_python_script(script_path: Path) -> None:
-    # Failing fast with py_compile gives a much clearer error than letting Manim crash later.
+    """Run py_compile on a generated script before invoking Manim."""
+    # Validate the generated script before invoking Manim.
     compile_cmd = [sys.executable, "-m", "py_compile", str(script_path)]
     compile_result = subprocess.run(
         compile_cmd,
@@ -271,14 +361,16 @@ def compile_python_script(script_path: Path) -> None:
 
 
 def build_manim_compatibility_preamble() -> str:
-    # This runtime shim is our "last mile" safety net for small generation mistakes and Windows quirks.
+    """Build a Python preamble that patches common Manim compatibility issues."""
+    # Inject runtime compatibility helpers required by generated Manim scenes.
+    ffmpeg_executable = json.dumps(get_ffmpeg_executable())
     color_aliases = {
         "CYAN": "#00BCD4",
         "AQUA": "#00BCD4",
         "FUCHSIA": "#D147BD",
     }
     lines = [
-        "# XplainAI Manim runtime compatibility aliases",
+        "# XplainAI Manim runtime compatibility helpers",
         "try:",
         "    import sys as _xplainai_sys",
         "    if hasattr(_xplainai_sys.stdout, 'reconfigure'):",
@@ -288,13 +380,76 @@ def build_manim_compatibility_preamble() -> str:
         "except Exception:",
         "    pass",
         "try:",
+        "    import os as _xplainai_os",
+        "    from manim import config as _xplainai_manim_config",
+        f"    _xplainai_ffmpeg = {ffmpeg_executable}",
+        "    _xplainai_manim_config.ffmpeg_executable = _xplainai_ffmpeg",
+        "    _xplainai_ffmpeg_dir = _xplainai_os.path.dirname(_xplainai_ffmpeg)",
+        "    _xplainai_path = _xplainai_os.environ.get('PATH', '')",
+        "    if _xplainai_ffmpeg_dir and _xplainai_ffmpeg_dir not in _xplainai_path.split(_xplainai_os.pathsep):",
+        "        _xplainai_os.environ['PATH'] = _xplainai_ffmpeg_dir + _xplainai_os.pathsep + _xplainai_path",
+        "except Exception:",
+        "    pass",
+        "try:",
         "    from pydub import AudioSegment as _XplainAIAudioSegment",
+        "    from pydub import audio_segment as _xplainai_pydub_audio_segment",
+        "    from pydub import utils as _xplainai_pydub_utils",
         "    import imageio_ffmpeg as _xplainai_imageio_ffmpeg",
         "    _XplainAIAudioSegment.converter = _xplainai_imageio_ffmpeg.get_ffmpeg_exe()",
+        "    _xplainai_original_mediainfo_json = _xplainai_pydub_utils.mediainfo_json",
+        "    def _xplainai_safe_mediainfo_json(*args, **kwargs):",
+        "        try:",
+        "            return _xplainai_original_mediainfo_json(*args, **kwargs)",
+        "        except FileNotFoundError:",
+        "            return {}",
+        "    _xplainai_pydub_utils.mediainfo_json = _xplainai_safe_mediainfo_json",
+        "    _xplainai_pydub_audio_segment.mediainfo_json = _xplainai_safe_mediainfo_json",
+        "except Exception:",
+        "    pass",
+        "try:",
+        "    import manim.scene.section as _xplainai_manim_section_module",
+        "    import manim.utils.commands as _xplainai_manim_commands_module",
+        "    _xplainai_original_get_video_metadata = _xplainai_manim_commands_module.get_video_metadata",
+        "    def _xplainai_safe_get_video_metadata(path_to_video):",
+        "        try:",
+        "            return _xplainai_original_get_video_metadata(path_to_video)",
+        "        except Exception:",
+        "            return {",
+        "                'width': 0,",
+        "                'height': 0,",
+        "                'nb_frames': '0',",
+        "                'duration': '0',",
+        "                'avg_frame_rate': '0/1',",
+        "                'codec_name': '',",
+        "            }",
+        "    _xplainai_manim_commands_module.get_video_metadata = _xplainai_safe_get_video_metadata",
+        "    _xplainai_manim_section_module.get_video_metadata = _xplainai_safe_get_video_metadata",
         "except Exception:",
         "    pass",
         "try:",
         "    _XplainAIOriginalAxes = Axes",
+        "    _XplainAIOriginalAxesPlot = _XplainAIOriginalAxes.plot",
+        "    _XplainAIOriginalAxesLineFromAxisToPoint = _XplainAIOriginalAxes.get_line_from_axis_to_point",
+        "    def _xplainai_axes_plot_compat(self, function, *args, **kwargs):",
+        "        def _xplainai_safe_function(t):",
+        "            _value = function(t)",
+        "            return float('nan') if _value is None else _value",
+        "        return _XplainAIOriginalAxesPlot(self, _xplainai_safe_function, *args, **kwargs)",
+        "    _XplainAIOriginalAxes.plot = _xplainai_axes_plot_compat",
+        "    def _xplainai_axes_line_from_axis_to_point_compat(self, *args, **kwargs):",
+        "        kwargs.pop('stroke_opacity', None)",
+        "        return _XplainAIOriginalAxesLineFromAxisToPoint(self, *args, **kwargs)",
+        "    _XplainAIOriginalAxes.get_line_from_axis_to_point = _xplainai_axes_line_from_axis_to_point_compat",
+        "    if not hasattr(_XplainAIOriginalAxes, 'plot_parametric'):",
+        "        def _xplainai_axes_plot_parametric(self, function, t_range=None, **kwargs):",
+        "            _t_range = t_range if t_range is not None else [0, 1]",
+        "            def _xplainai_wrapped_function(t):",
+        "                _point = function(t)",
+        "                _x = float(_point[0])",
+        "                _y = float(_point[1])",
+        "                return self.c2p(_x, _y)",
+        "            return ParametricFunction(_xplainai_wrapped_function, t_range=_t_range, **kwargs)",
+        "        _XplainAIOriginalAxes.plot_parametric = _xplainai_axes_plot_parametric",
         "    def Axes(*args, **kwargs):",
         "        if 'width' in kwargs and 'x_length' not in kwargs:",
         "            kwargs['x_length'] = kwargs.pop('width')",
@@ -347,6 +502,13 @@ def build_manim_compatibility_preamble() -> str:
         "    pass",
         "try:",
         "    _XplainAIOriginalMathTexGetPartByTex = MathTex.get_part_by_tex",
+        "    _XplainAIOriginalMathTexInit = MathTex.__init__",
+        "    def _xplainai_mathtex_init_compat(self, *args, **kwargs):",
+        "        kwargs.pop('weight', None)",
+        "        kwargs.pop('slant', None)",
+        "        kwargs.pop('font', None)",
+        "        return _XplainAIOriginalMathTexInit(self, *args, **kwargs)",
+        "    MathTex.__init__ = _xplainai_mathtex_init_compat",
         "    def _xplainai_safe_get_part_by_tex(self, *args, **kwargs):",
         "        _part = _XplainAIOriginalMathTexGetPartByTex(self, *args, **kwargs)",
         "        return _part if _part is not None else self",
@@ -355,10 +517,33 @@ def build_manim_compatibility_preamble() -> str:
         "    pass",
         "try:",
         "    _XplainAIOriginalTexGetPartByTex = Tex.get_part_by_tex",
+        "    _XplainAIOriginalTexInit = Tex.__init__",
+        "    def _xplainai_tex_init_compat(self, *args, **kwargs):",
+        "        kwargs.pop('weight', None)",
+        "        kwargs.pop('slant', None)",
+        "        kwargs.pop('font', None)",
+        "        return _XplainAIOriginalTexInit(self, *args, **kwargs)",
+        "    Tex.__init__ = _xplainai_tex_init_compat",
         "    def _xplainai_safe_tex_get_part_by_tex(self, *args, **kwargs):",
         "        _part = _XplainAIOriginalTexGetPartByTex(self, *args, **kwargs)",
         "        return _part if _part is not None else self",
         "    Tex.get_part_by_tex = _xplainai_safe_tex_get_part_by_tex",
+        "except Exception:",
+        "    pass",
+        "try:",
+        "    _XplainAIOriginalTextInit = Text.__init__",
+        "    def _xplainai_text_init_compat(self, *args, **kwargs):",
+        "        kwargs.pop('alignment', None)",
+        "        return _XplainAIOriginalTextInit(self, *args, **kwargs)",
+        "    Text.__init__ = _xplainai_text_init_compat",
+        "except Exception:",
+        "    pass",
+        "try:",
+        "    _XplainAIOriginalMarkupTextInit = MarkupText.__init__",
+        "    def _xplainai_markuptext_init_compat(self, *args, **kwargs):",
+        "        kwargs.pop('alignment', None)",
+        "        return _XplainAIOriginalMarkupTextInit(self, *args, **kwargs)",
+        "    MarkupText.__init__ = _xplainai_markuptext_init_compat",
         "except Exception:",
         "    pass",
         "try:",
@@ -455,6 +640,7 @@ def build_manim_compatibility_preamble() -> str:
 
 
 def strip_manim_runtime_compatibility(code: str) -> str:
+    """Remove the injected compatibility preamble from a script, if present."""
     sanitized = code
     compat_preamble = build_manim_compatibility_preamble()
     while compat_preamble in sanitized:
@@ -463,6 +649,7 @@ def strip_manim_runtime_compatibility(code: str) -> str:
 
 
 def apply_manim_runtime_compatibility(code: str) -> str:
+    """Inject the compatibility preamble after imports in a generated script."""
     content = strip_manim_runtime_compatibility(code).rstrip() + "\n"
     preamble = build_manim_compatibility_preamble()
 
@@ -486,6 +673,7 @@ def apply_manim_runtime_compatibility(code: str) -> str:
 
 
 def build_skip_sections_preamble(skip_before_section_index: int) -> str:
+    """Build a preamble that skips animations before a chosen section index."""
     return (
         "import re as _xplainai_re\n"
         "from manim.scene.scene import Scene as _XplainAIScene\n"
@@ -512,15 +700,27 @@ def build_skip_sections_preamble(skip_before_section_index: int) -> str:
 
 
 def build_python_subprocess_env() -> Dict[str, str]:
-    # Voiceover/TTS libraries can be surprisingly sensitive to Windows console encodings.
-    # Forcing UTF-8 here keeps punctuation-heavy narration from crashing the render subprocess.
+    """Return subprocess environment variables for Python-based render steps."""
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUTF8"] = "1"
+    temp_dir, cache_dir, tts_home = get_tts_runtime_dirs()
+    env["TEMP"] = str(temp_dir)
+    env["TMP"] = str(temp_dir)
+    env["NUMBA_CACHE_DIR"] = str(cache_dir)
+    env["TTS_HOME"] = str(tts_home)
+    env["XDG_DATA_HOME"] = str(tts_home.parent)
+    ffmpeg_executable = get_ffmpeg_executable()
+    ffmpeg_dir = str(Path(ffmpeg_executable).resolve().parent)
+    path_entries = env.get("PATH", "").split(os.pathsep) if env.get("PATH") else []
+    if ffmpeg_dir not in path_entries:
+        env["PATH"] = ffmpeg_dir + (os.pathsep + env["PATH"] if env.get("PATH") else "")
+    env["IMAGEIO_FFMPEG_EXE"] = ffmpeg_executable
     return env
 
 
 def is_valid_video_clip(video_path: Path) -> bool:
+    """Check whether a path points to a non-empty mp4 file."""
     return (
         video_path.exists()
         and video_path.is_file()
@@ -534,6 +734,7 @@ def load_section_assets(
     scene_name: str,
     index_offset: int = 0,
 ) -> List[Dict[str, Any]]:
+    """Load Manim section metadata and clip paths for one rendered video."""
     sections_dir = video_path.parent / "sections"
     candidate_paths = [
         sections_dir / f"{video_path.stem}.json",
@@ -570,7 +771,10 @@ def render_manim_video(
     save_sections: bool = True,
     skip_before_section_index: Optional[int] = None,
 ) -> Dict[str, Any]:
-    # Every render gets an isolated scratch folder so fresh renders and rerenders never clobber each other.
+    """Render generated Manim code and return the saved artifact metadata."""
+    ensure_local_render_environment()
+
+    # Use an isolated render directory for each render attempt.
     render_dir = make_render_dir(run_dir, render_label)
     media_dir = render_dir / "media"
     media_dir.mkdir(parents=True, exist_ok=True)
@@ -589,7 +793,7 @@ def render_manim_video(
 
     compile_python_script(render_script_path)
 
-    # Detect the scene from the original generated code, not from the compatibility-patched wrapper file.
+    # Detect scene classes from the original generated script.
     scene_classes = detect_scene_classes(sanitize_generated_manim_code(code))
     if not scene_classes:
         raise RuntimeError("Could not find a Manim scene class in the generated code.")
@@ -666,7 +870,8 @@ def render_manim_video(
 
 
 def stitch_videos(video_paths: List[Path], output_path: Path) -> Path:
-    # Partial rerenders only feel fast if we can stitch the untouched prefix back onto the new suffix safely.
+    """Concatenate multiple video clips into one final mp4."""
+    # Stitch partial rerenders only when the preserved prefix and new suffix are structurally safe.
     valid_paths = [path for path in video_paths if is_valid_video_clip(path)]
     if not valid_paths:
         raise RuntimeError("No valid video clips were available for stitching.")
@@ -685,7 +890,7 @@ def stitch_videos(video_paths: List[Path], output_path: Path) -> Path:
         concat_lines.append(f"file '{normalized}'")
     concat_list_path.write_text("\n".join(concat_lines) + "\n", encoding="utf-8")
 
-    ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+    ffmpeg_exe = get_ffmpeg_executable()
     expected_audio = any(video_has_audio_stream(path) for path in valid_paths)
     concat_cmd = [
         ffmpeg_exe,
@@ -753,9 +958,10 @@ def stitch_videos(video_paths: List[Path], output_path: Path) -> Path:
 
 
 def video_has_audio_stream(video_path: Path) -> bool:
+    """Probe a video file and report whether ffmpeg sees an audio stream."""
     if not video_path.exists():
         return False
-    ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+    ffmpeg = get_ffmpeg_executable()
     probe_result = subprocess.run(
         [ffmpeg, "-i", str(video_path)],
         cwd=PROJECT_ROOT,
@@ -774,6 +980,7 @@ def merge_section_entries(
     updated_sections: List[Dict[str, Any]],
     start_index: int,
 ) -> List[Dict[str, Any]]:
+    """Replace section entries from a given index onward."""
     prefix = [dict(item) for item in existing_sections if int(item.get("index", -1)) < start_index]
     suffix = [dict(item) for item in updated_sections]
     merged = prefix + suffix
@@ -788,7 +995,8 @@ def rerender_edited_video(
     rerender_mode: str,
     section_index: Optional[int] = None,
 ) -> Dict[str, Any]:
-    # Section rerenders are the fast path, but we fall back to a full render whenever the saved clip boundaries look unsafe.
+    """Rerender edited code either fully or from a chosen section onward."""
+    # Fall back to a full render when saved section boundaries are not reliable.
     run_dir = Path(output["run_dir"])
     current_render = output.get("render_result") or {}
     existing_sections = list(current_render.get("sections") or [])
@@ -891,7 +1099,8 @@ def run_pipeline(
     uploaded_file: Any = None,
     progress_callback: Optional[Callable[[str, str], None]] = None,
 ) -> Dict[str, Any]:
-    # This is the main app pipeline: save input, parse it, reason over it, verify it, then optionally render the Manim result.
+    """Run the parser, reasoning, and optional render stages for one request."""
+    # Execute the end-to-end pipeline and persist the resulting artifacts.
     orchestrator = get_orchestrator()
     run_label = uploaded_file.name if uploaded_file is not None else (text_input[:32] or "text")
     run_dir = make_run_dir(run_label)
@@ -937,7 +1146,7 @@ def run_pipeline(
             progress_callback("parse", f"Replicate parser complete using {model_name}{suffix}.")
 
     if parsed_input is not None:
-        # If we already have fresh parser output in memory, we pass it straight through and skip a redundant parse call.
+        # Reuse the parser output produced earlier in this request.
         result = orchestrator.process(
             parsed_input,
             input_type="json",
@@ -995,6 +1204,7 @@ def run_pipeline(
 
 
 def render_preview(input_mode: str, text_input: str = "", uploaded_file: Any = None) -> None:
+    """Show a disabled preview of the current input in the UI."""
     if input_mode == "Text":
         st.text_area("Input preview", value=text_input, height=180, disabled=True)
         return
@@ -1014,6 +1224,7 @@ def render_preview(input_mode: str, text_input: str = "", uploaded_file: Any = N
 
 
 def render_saved_artifact_buttons(saved_files: Dict[str, str], render_result: Optional[Dict[str, Any]]) -> None:
+    """Render download buttons for saved bundle artifacts."""
     for label, path_str in saved_files.items():
         path = Path(path_str)
         if path.exists():
@@ -1047,6 +1258,7 @@ def render_saved_artifact_buttons(saved_files: Dict[str, str], render_result: Op
 
 
 def _preferred_render_video(run_dir: Path) -> Optional[Path]:
+    """Pick the best video artifact from a saved run directory."""
     candidates = [
         path for path in run_dir.rglob("*.mp4")
         if "partial_movie_files" not in path.parts and "sections" not in path.parts
@@ -1068,6 +1280,7 @@ def _preferred_render_video(run_dir: Path) -> Optional[Path]:
 
 
 def _preferred_render_image(run_dir: Path) -> Optional[Path]:
+    """Pick the best image artifact from a saved run directory."""
     candidates = [
         path for path in run_dir.rglob("*.png")
         if "texts" not in path.parts
@@ -1087,6 +1300,7 @@ def _preferred_render_image(run_dir: Path) -> Optional[Path]:
 
 
 def _preferred_code_path(run_dir: Path) -> Optional[Path]:
+    """Pick the latest useful generated code file for a saved run."""
     current_path = run_dir / "current_generated_scene.py"
     if current_path.exists():
         return current_path
@@ -1101,6 +1315,7 @@ def _preferred_code_path(run_dir: Path) -> Optional[Path]:
 
 
 def discover_demo_runs(limit: int = 8) -> List[Dict[str, Any]]:
+    """List recent runs that can be reopened as demos in the editor."""
     candidates: List[Dict[str, Any]] = []
     for run_dir in STREAMLIT_RUNS_DIR.iterdir():
         if not run_dir.is_dir():
@@ -1133,6 +1348,7 @@ def discover_demo_runs(limit: int = 8) -> List[Dict[str, Any]]:
 
 
 def build_demo_output(run_dir: Path | str) -> Optional[Dict[str, Any]]:
+    """Build a frontend bundle from an already-saved run directory."""
     run_dir = Path(run_dir)
     code_path = _preferred_code_path(run_dir)
     video_path = _preferred_render_video(run_dir)
@@ -1215,6 +1431,7 @@ def build_demo_output(run_dir: Path | str) -> Optional[Dict[str, Any]]:
 
 
 def load_demo_into_session(run_dir: Path) -> None:
+    """Load a saved run into Streamlit session state."""
     demo_output = build_demo_output(run_dir)
     if demo_output is None:
         raise RuntimeError(f"Could not load a usable demo from {run_dir}.")
@@ -1227,6 +1444,7 @@ def load_demo_into_session(run_dir: Path) -> None:
 
 
 def ensure_editor_state(output: Dict[str, Any]) -> None:
+    """Keep the code editor state aligned with the currently loaded run."""
     run_dir = output["run_dir"]
     current_code = str((output["pipeline_result"].get("manim_code") or {}).get("text", ""))
     current_editor = str(st.session_state.get("xplainai_code_editor", ""))
@@ -1240,6 +1458,7 @@ def ensure_editor_state(output: Dict[str, Any]) -> None:
 
 
 def render_sections_summary(render_result: Optional[Dict[str, Any]]) -> None:
+    """Show the saved section clips for the current render, if available."""
     sections = list((render_result or {}).get("sections") or [])
     if not sections:
         st.info("This render does not currently expose section clips. Full rerender will still work.")
@@ -1259,6 +1478,7 @@ def render_sections_summary(render_result: Optional[Dict[str, Any]]) -> None:
 
 
 def main() -> None:
+    """Render the Streamlit application UI and handle user actions."""
     st.set_page_config(page_title="XplainAI Visualizer", layout="wide")
     st.title("XplainAI Visualizer")
     st.caption(
@@ -1491,7 +1711,8 @@ def main() -> None:
                     f"Chroma knowledge base ready with {kb_status.get('chunk_count', 0)} chunks from {kb_status.get('document_count', 0)} source files."
                 )
             else:
-                st.info("Chroma knowledge base is currently disabled or unavailable.")
+                reason = str(kb_status.get("reason") or "Chroma knowledge base is currently disabled or unavailable.")
+                st.info(reason)
             st.json(rag_payload)
 
         with tabs[5]:

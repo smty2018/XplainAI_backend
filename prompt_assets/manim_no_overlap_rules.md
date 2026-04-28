@@ -16,6 +16,8 @@ Strict no-overlap rules for generated Manim code:
 4. Long equations must be reflowed before display.
 - If a formula exceeds about 80 percent of the available box width, split it into two or more lines.
 - Use a helper such as `stack_in_box(...)` or `multiline_formula(...)`.
+- If 3 or more lines are stacked into one derivation group, the destination box must be tall enough that the group can stay readable after placement.
+- Do not hide a bad box budget behind auto-scaling. If the group only fits by shrinking to a tiny size, the scene should be split or the box should be enlarged.
 
 4b. Every transformed formula state must be placed before animation.
 - If `step1`, `step2`, `eq_standard`, or similar mobjects are used in `FadeIn`, `Transform`, or `ReplacementTransform`, each one must be explicitly placed in its destination box before it is animated.
@@ -42,6 +44,8 @@ Strict no-overlap rules for generated Manim code:
 - In algebra scenes, do not keep the old factorization, the distributed expansion, and the combined result all visible in the same region unless each has its own dedicated box.
 - In calculus evaluation scenes, do not keep `Antiderivative:` text, the primitive function, and the substitution stack visible in one formula band unless each has a separate box.
 - When a box changes owners, treat that as a scene transition event: old owner out, new arranged owner in, then reveal details inside the new owner.
+- Sequential visibility does not mean an underfilled frame. Do not clear away the supporting context so aggressively that one small leftover formula is stranded on a blank screen.
+- If only one result line remains, promote it into a larger result panel or keep a nearby title, recap note, exact form, or supporting derivation summary visible with it.
 
 8. Final self-check before returning code.
 - No two visible major groups overlap.
@@ -51,3 +55,7 @@ Strict no-overlap rules for generated Manim code:
 - If the scene includes axes, both axes are labeled and readable.
 - If the problem specifies vertical boundaries such as `x = a` and `x = b`, both boundary lines are actually drawn and labeled.
 - If a shaded graph region is shown, it is bounded by the same curve/axis/lines named in the problem statement.
+- If a graph region is described as "under the curve," the shaded lower boundary is the x-axis or another stated boundary, never an accidental diagonal closure from a parametric arc.
+- If readable text would require shrinking below a comfortable size, restructure the scene instead of compressing the typography.
+- If the scene would leave most of the frame empty, restructure it so the answer is presented as a deliberate panel or recap instead of a tiny isolated line.
+- If a multi-line derivation stack or answer card is being squeezed into a short box, treat that as a layout failure even if nothing technically overlaps.

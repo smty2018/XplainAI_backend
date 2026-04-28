@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
@@ -24,13 +25,15 @@ TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?|==|!=|<=|>=|[+\-*/=
 
 @dataclass
 class KnowledgeChunk:
+    """Store one text chunk and the metadata needed to retrieve it later."""
+
     chunk_id: str
     document: str
     metadata: Dict[str, Any]
 
 
 class SimpleHashEmbedding:
-    """Offline deterministic embedding to keep Chroma self-contained."""
+    """Create simple deterministic embeddings without an external service."""
 
     def __init__(self, dimension: int = 384) -> None:
         self.dimension = max(64, int(dimension))
@@ -66,11 +69,12 @@ class SimpleHashEmbedding:
 
 
 class ManimKnowledgeBase:
-    """Persistent Chroma collection for Manim docs/examples retrieval."""
+    """Load, index, and query the local Manim knowledge base."""
 
     VERSION = "manim-rag-v1"
 
     def __init__(self, project_root: Path, config: Dict[str, Any]) -> None:
+        # Keep all retrieval paths together so indexing and querying use the same local sources.
         # This KB is intentionally local-first: prompt assets + scraped docs/examples + a simple embedding path that works offline.
         self.project_root = Path(project_root)
         self.config = dict(config or {})
@@ -89,11 +93,20 @@ class ManimKnowledgeBase:
         self._client = None
         self._collection = None
         self._last_sync_stats: Dict[str, Any] = {}
+        self.disabled_reason: Optional[str] = None
 
         if self.enabled and chromadb is not None:
             self._setup()
         else:
+            if not self.enabled:
+                self.disabled_reason = "manim_rag_enabled is false in the current config."
+            elif chromadb is None:
+                self.disabled_reason = (
+                    "chromadb is not installed in the current Python interpreter "
+                    f"({sys.executable})."
+                )
             self.enabled = False
+
 
     def _setup(self) -> None:
         self.persist_dir.mkdir(parents=True, exist_ok=True)
@@ -106,11 +119,12 @@ class ManimKnowledgeBase:
         self.sync_index()
 
     def sync_index(self) -> Dict[str, Any]:
-        # Sync is idempotent on purpose so we can call it from app startup without worrying about duplicate chunks.
+        # Repeated sync calls are safe during application startup and refresh cycles.
         if not self.enabled or self._collection is None:
             self._last_sync_stats = {
                 "enabled": False,
                 "status": "disabled",
+                "reason": self.disabled_reason or "Knowledge base is disabled or unavailable.",
                 "document_count": 0,
                 "chunk_count": 0,
                 "sources": [],
@@ -181,7 +195,7 @@ class ManimKnowledgeBase:
         top_k: int = 4,
         stage: str = "general",
     ) -> Dict[str, Any]:
-        # We over-fetch first, then rerank/dedupe so the final prompt gets a small but diverse set of useful snippets.
+        # Retrieve a larger candidate set first, then rerank and deduplicate the final prompt context.
         if not self.enabled or self._collection is None:
             return {
                 "enabled": False,

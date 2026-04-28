@@ -31,15 +31,14 @@ class ReplicatePredictionError(ReplicateAPIError):
 
 
 class ReplicateDeepSeekVL2Parser(LocalParser):
-    """Parser that preserves the current schema but runs DeepSeek-VL2 on Replicate."""
+    """Run the LocalParser contract through Replicate-hosted DeepSeek-VL2."""
 
     def __init__(
         self,
         config_path: str = "config/config.yaml",
         api_token: Optional[str] = None,
     ):
-        # The local parser prints a lot of setup noise; we reuse its schema and
-        # normalization logic, but keep startup quiet for the hosted path.
+        # Reuse the shared parser initialization while suppressing unnecessary startup output.
         with redirect_stdout(io.StringIO()):
             super().__init__(config_path)
 
@@ -91,8 +90,7 @@ class ReplicateDeepSeekVL2Parser(LocalParser):
         self._safe_print("Replicate-hosted DeepSeek-VL2 will be called on demand.")
 
     def _resolve_api_token(self, explicit_token: Optional[str]) -> str:
-        # We accept a few historical env var names so older local setups keep
-        # working without forcing everyone to rename secrets immediately.
+        # Support historical environment variable names for backward compatibility.
         token = (
             explicit_token
             or os.getenv("REPLICATE_API_TOKEN")
@@ -221,8 +219,7 @@ class ReplicateDeepSeekVL2Parser(LocalParser):
         last_payload = b""
         last_quality = 0
 
-        # Replicate wants a single inline image payload, so we progressively
-        # trade JPEG quality and resolution until the request fits the limit.
+        # Reduce image size progressively until the request fits the hosted payload limit.
         for _ in range(6):
             for quality in (80, 70, 60, 50, 40, 30):
                 buffer = io.BytesIO()
@@ -1032,8 +1029,7 @@ class ReplicateDeepSeekVL2Parser(LocalParser):
             f"Query: {text}"
         )
 
-        # Replicate's VL2 endpoint still expects an image-oriented multimodal
-        # interface, so we render plain text onto a clean canvas first.
+        # Render text inputs onto an image canvas because the hosted endpoint expects image-oriented input.
         text_image = self._text_to_image(text)
         response, model_timing = self._run_vl2(
             prompt,
@@ -1189,8 +1185,7 @@ class ReplicateDeepSeekVL2Parser(LocalParser):
         if not images:
             return {"error": f"No PDF pages available for {pdf_full_path}"}
 
-        # The hosted parser only sees one image input, so we stitch pages into a
-        # single reading-order canvas and keep the text layer as a side hint.
+        # Merge PDF pages into a single reading-order canvas for the hosted single-image interface.
         prompt = (
             "Analyze this <image> and respond with valid JSON only.\n"
             "Return ONLY these keys: intent, topic, domain, complexity, language, key_concepts, equations, "

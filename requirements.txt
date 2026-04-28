@@ -21,14 +21,14 @@ pymupdf>=1.23.0
 
 # Math and validation
 sympy>=1.12
-numpy>=1.24.0
+numpy>=1.26,<2
 
 # Utilities
-python-dotenv>=1.0.0
+python-dotenv>=0.21,<0.22
 tqdm>=4.66.0
 pyyaml>=6.0
 requests>=2.31.0
-imageio-ffmpeg>=0.5.1
+imageio-ffmpeg==0.6.0
 chromadb>=1.5.0
 beautifulsoup4>=4.12.3
 
@@ -37,3 +37,9 @@ fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 python-multipart>=0.0.9
 streamlit>=1.39.0
+
+# Local Manim rendering and narration
+manim==0.18.1
+manim-voiceover==0.3.7
+pydub==0.25.1
+TTS==0.22.0

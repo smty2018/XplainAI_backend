@@ -26,7 +26,7 @@ DEFAULT_OUTPUT_DIR = Path("data/manim_kb/scraped")
 
 
 class ManimKnowledgeScraper:
-    """Standalone crawler for Manim docs and example scene sources."""
+    """Download Manim docs and examples into the local knowledge-base seed folder."""
 
     USER_AGENT = "xplainai-manim-kb-scraper/1.0"
 
@@ -37,6 +37,7 @@ class ManimKnowledgeScraper:
         session: Optional[requests.Session] = None,
         timeout_seconds: int = 30,
     ) -> None:
+        # Store the output layout once so the rest of the scraper can write files consistently.
         self.output_dir = Path(output_dir)
         self.docs_dir = self.output_dir / "docs"
         self.examples_dir = self.output_dir / "examples" / "github"
@@ -54,8 +55,7 @@ class ManimKnowledgeScraper:
         max_doc_pages: int = 250,
         max_example_files: int = 200,
     ) -> Dict[str, Any]:
-        # One manifest makes it easy to inspect exactly what fed the KB after a
-        # scrape, especially when we rerun the crawler with larger limits.
+        # Record a manifest for each scrape so the indexed inputs remain auditable.
         self._ensure_dirs()
         docs_result = self.scrape_docs(doc_seed_urls or DEFAULT_DOC_SEEDS, max_pages=max_doc_pages)
         github_result = self.scrape_github_examples(github_tree_url, max_files=max_example_files)
@@ -92,8 +92,7 @@ class ManimKnowledgeScraper:
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 output_path.write_text(markdown, encoding="utf-8")
                 written.append(str(output_path))
-                # The example gallery page is much more valuable when we split
-                # it into per-example assets instead of leaving one giant blob.
+                # Split the example gallery into per-example assets for more useful retrieval chunks.
                 if url.rstrip("/").endswith("/examples.html"):
                     gallery_files.extend(self._write_gallery_assets(markdown, source_url=url))
 
@@ -116,8 +115,7 @@ class ManimKnowledgeScraper:
         pending: deque[str] = deque([base_path])
         written: List[str] = []
 
-        # We walk the GitHub contents API breadth-first so nested folders stay
-        # discoverable without needing a custom recursive endpoint.
+        # Traverse the GitHub contents API breadth-first to cover nested example directories.
         while pending and len(written) < max_files:
             current_path = pending.popleft()
             api_url = self._github_contents_api_url(owner, repo, current_path, ref)
@@ -230,8 +228,7 @@ class ManimKnowledgeScraper:
         if container is None:
             return title, "", []
 
-        # We strip obvious chrome here so the KB stores article content rather
-        # than navigation, buttons, and theme furniture.
+        # Remove navigation and presentation elements so the stored content stays article-focused.
         for tag in list(container.select("script, style, nav, aside, footer, button, form")):
             tag.decompose()
 
@@ -519,6 +516,7 @@ class ManimKnowledgeScraper:
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
+    """Build the command-line arguments for the scraper script."""
     parser = argparse.ArgumentParser(description="Scrape Manim docs and examples into the local KB seed directory.")
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR), help="Directory to write scraped content into.")
     parser.add_argument("--max-doc-pages", type=int, default=250, help="Maximum number of docs pages to crawl.")
@@ -527,6 +525,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    """Run the scraper and print the saved manifest."""
     args = build_arg_parser().parse_args()
     scraper = ManimKnowledgeScraper(output_dir=args.output_dir)
     manifest = scraper.scrape_all(

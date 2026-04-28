@@ -43,6 +43,22 @@ Budget width and height for graphs, braces, formulas, labels, and final answer b
 - If a graph uses axes, label the x-axis and y-axis clearly.
 - If the problem names vertical boundaries like `x = 1` and `x = 4`, those lines should be drawn at the actual coordinates, not just mentioned as floating text.
 - If a bounded region is shaded, make sure the curve, x-axis, and every stated boundary line are all visible together.
+- If the problem says "area under the curve," the shaded region must close against the x-axis or another explicitly stated lower boundary, not against a diagonal chord.
+- Use `axes.get_area(...)` only with a function graph from `axes.plot(...)`. If the visible curve is parametric, convert the relevant part to a function graph or build the region boundary explicitly.
+
+8c. Readability is part of layout.
+- Do not solve crowding by shrinking important text to tiny sizes.
+- Main formulas, evaluation lines, and explanatory prose should stay comfortably readable.
+- If content does not fit at a readable size, give it a larger box or split it across more scenes.
+- Choose box heights from line count. A derivation stack with 3 or 4 lines needs a genuinely tall derivation band; do not trust `fit_to_box(...)` to save an undersized layout.
+- Multi-line answer cards and summary panels need extra vertical room for text plus padding and any surrounding rectangle.
+- If a box is short enough that auto-fit would noticeably miniaturize the content, the layout is wrong and should be restructured.
+
+8d. Visual density matters too.
+- A clean layout should not become an empty layout. Avoid scenes where only one small formula or number sits alone on a mostly blank frame.
+- Every scene should either let one major visual region carry the frame with real presence, such as a graph, diagram, or large derivation stack, or keep at least two purposeful regions active, such as title plus derivation, graph plus callout, or answer plus recap note.
+- Final answer scenes should use a result panel, summary strip, or paired callout with context like units, exact form, interpretation, or a compact recap. Do not end on a tiny centered `MathTex` line by itself unless it is a very brief transition.
+- When a derivation resolves to a single value, promote that value into a larger answer card or keep a compact supporting stack visible until the answer panel is fully established.
 
 9. Formula scenes need stricter rules than generic scenes.
 - Never keep two dense equations in the same box at the same time.

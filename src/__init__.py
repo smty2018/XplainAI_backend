@@ -1,4 +1,4 @@
-"""xplainai source package."""
+"""Top-level exports for the main XplainAI source modules."""
 
 # Re-export the main entry points so the rest of the app can import from
 # `src` without remembering the lower-level module layout.

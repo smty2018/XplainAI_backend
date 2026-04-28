@@ -23,7 +23,7 @@ except ImportError:  # pragma: no cover - dependency is expected but handled def
 
 
 class VerificationEngine:
-    """Run lightweight independent checks against an LLM-produced solution."""
+    """Run lightweight math and unit checks before a solution is visualized."""
 
     VERSION = "post-solution-simple-v1"
     _RESERVED_NAMES = {
@@ -87,8 +87,7 @@ class VerificationEngine:
     }
 
     def __init__(self) -> None:
-        # We keep the verifier lightweight on purpose: useful enough to catch obvious math drift,
-        # but cheap enough to run on every solution before visualization.
+        # Keep verification lightweight enough to run on every solution before visualization.
         self.sympy_available = sp is not None and parse_expr is not None
         self._transformations = standard_transformations
         if implicit_multiplication_application is not None and convert_xor is not None:
@@ -98,8 +97,7 @@ class VerificationEngine:
             )
 
     def run(self, parsed_input: Dict[str, Any], solution: Dict[str, Any]) -> Dict[str, Any]:
-        # Post-solution verification is the gatekeeper between "the model proposed this"
-        # and "we trust this enough to animate it."
+        # Verify the proposed solution before it is used for planning or animation.
         start = perf_counter()
         requested = self._normalize_requested_checks(
             parsed_input.get("verification_targets"),

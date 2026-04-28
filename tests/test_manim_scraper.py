@@ -1,3 +1,5 @@
+"""Tests for the Manim docs and example scraper."""
+
 import json
 import tempfile
 import unittest
@@ -7,6 +9,8 @@ from scraper.manim_scraper import ManimKnowledgeScraper
 
 
 class FakeResponse:
+    """Minimal response object for scraper tests."""
+
     def __init__(self, *, text="", json_data=None, status_code=200):
         self.text = text
         self._json_data = json_data
@@ -22,6 +26,8 @@ class FakeResponse:
 
 
 class FakeSession:
+    """Minimal session object that returns predefined responses."""
+
     def __init__(self, mapping):
         self.mapping = mapping
         self.headers = {}
@@ -33,18 +39,19 @@ class FakeSession:
 
 
 class ManimScraperTests(unittest.TestCase):
+    """Check crawling, parsing, and gallery-splitting behavior."""
+
     def setUp(self):
-        # The scraper writes a lot of files, so every test gets its own isolated
-        # workspace instead of sharing a fixture tree.
+        # Use an isolated workspace for each test because the scraper writes many files.
         self.temp_dir = Path(tempfile.mkdtemp(prefix="manim_scraper_test_"))
 
     def _make_scraper(self, mapping):
-        # Most tests use a fake session so we can exercise the crawl logic
-        # deterministically without depending on network availability.
+        # Use a fake session to test crawl behavior deterministically without network access.
         session = FakeSession(mapping)
         return ManimKnowledgeScraper(output_dir=self.temp_dir / "scraped", session=session)
 
     def test_normalize_docs_url_filters_external_and_assets(self):
+        """Only documentation pages should stay in the crawl set."""
         scraper = self._make_scraper({})
         self.assertEqual(
             scraper._normalize_docs_url("/en/stable/tutorials_guides.html#section"),
@@ -54,6 +61,7 @@ class ManimScraperTests(unittest.TestCase):
         self.assertIsNone(scraper._normalize_docs_url("https://docs.manim.community/en/stable/_static/file.js"))
 
     def test_extract_docs_links_keeps_related_pages(self):
+        """Related docs links should be kept and unrelated links should be dropped."""
         scraper = self._make_scraper({})
         html = """
         <html><body>
@@ -75,6 +83,7 @@ class ManimScraperTests(unittest.TestCase):
         )
 
     def test_docs_markdown_preserves_headings_lists_and_code(self):
+        """Markdown conversion should keep headings, lists, and fenced code blocks."""
         scraper = self._make_scraper({})
         html = """
         <html>
@@ -95,6 +104,7 @@ class ManimScraperTests(unittest.TestCase):
         self.assertIn('print("hi")', markdown)
 
     def test_parse_github_tree_url(self):
+        """GitHub tree URLs should split cleanly into repository parts."""
         scraper = self._make_scraper({})
         owner, repo, ref, path = scraper._parse_github_tree_url(
             "https://github.com/ManimCommunity/manim/tree/main/example_scenes"
@@ -102,6 +112,7 @@ class ManimScraperTests(unittest.TestCase):
         self.assertEqual((owner, repo, ref, path), ("ManimCommunity", "manim", "main", "example_scenes"))
 
     def test_scrape_docs_writes_multiple_related_pages(self):
+        """The docs scraper should save both the seed page and linked pages."""
         mapping = {
             "https://docs.manim.community/en/stable/": FakeResponse(
                 text="""
@@ -132,6 +143,7 @@ class ManimScraperTests(unittest.TestCase):
         self.assertTrue((scraper.docs_dir / "tutorials_guides.md").exists())
 
     def test_scrape_github_examples_recurses_and_downloads_python(self):
+        """GitHub example scraping should recurse into folders and save Python files."""
         mapping = {
             "https://api.github.com/repos/ManimCommunity/manim/contents/example_scenes?ref=main": FakeResponse(
                 json_data=[
@@ -171,6 +183,7 @@ class ManimScraperTests(unittest.TestCase):
         self.assertTrue((scraper.examples_dir / "README.md").exists())
 
     def test_scrape_all_writes_manifest(self):
+        """The top-level scrape command should write a manifest file."""
         mapping = {
             "https://docs.manim.community/en/stable/": FakeResponse(
                 text="""
@@ -213,6 +226,7 @@ class ManimScraperTests(unittest.TestCase):
         self.assertEqual(saved["github_examples"]["files_written"], 1)
 
     def test_split_example_gallery_markdown_extracts_clean_examples(self):
+        """Gallery splitting should keep the clean Python block for each example."""
         scraper = self._make_scraper({})
         markdown = """
 # Example Gallery
@@ -259,6 +273,7 @@ class BraceAnnotation(Scene):
         self.assertIn("class BraceAnnotation(Scene):", examples[1]["code"])
 
     def test_write_gallery_assets_creates_md_and_py_files(self):
+        """Gallery assets should be saved as both markdown and Python files."""
         scraper = self._make_scraper({})
         markdown = """
 # Example Gallery

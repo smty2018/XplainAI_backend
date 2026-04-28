@@ -1,5 +1,5 @@
-"""Project data models and schemas.
+"""Shared data model definitions.
 
-This file is intentionally lightweight right now, but it is the natural place
-to collect shared typed payloads once more of the pipeline contracts harden.
+This module is intentionally small today. It is the right place to move
+shared typed payloads once more parser, verifier, and render contracts settle.
 """

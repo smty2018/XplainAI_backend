@@ -1,5 +1,5 @@
 """Shared utility helpers.
 
-We keep cross-cutting one-off helpers here only when they are genuinely shared;
-domain-specific logic stays closer to the parser, reasoner, or scraper modules.
+Only place helpers here when they are genuinely used across modules.
+Module-specific behavior should stay close to the code that owns it.
 """
