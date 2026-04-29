@@ -342,6 +342,18 @@ def detect_scene_classes(code: str) -> List[str]:
 def compile_python_script(script_path: Path) -> None:
     """Run py_compile on a generated script before invoking Manim."""
     # Validate the generated script before invoking Manim.
+    compile_error = get_python_compile_error(script_path)
+    if compile_error is None:
+        return
+    raise RuntimeError(
+        "Generated Manim code did not compile.\n"
+        + compile_error
+    )
+
+
+def get_python_compile_error(script_path: Path) -> Optional[str]:
+    """Return the py_compile error text for a script, or None when it compiles."""
+    # Keep compile probing separate so the render path can attempt one automatic repair pass.
     compile_cmd = [sys.executable, "-m", "py_compile", str(script_path)]
     compile_result = subprocess.run(
         compile_cmd,
@@ -353,11 +365,36 @@ def compile_python_script(script_path: Path) -> None:
         errors="replace",
         timeout=120,
     )
-    if compile_result.returncode != 0:
-        raise RuntimeError(
-            "Generated Manim code did not compile.\n"
-            + (compile_result.stderr or compile_result.stdout or "Unknown py_compile error.")
-        )
+    if compile_result.returncode == 0:
+        return None
+    return compile_result.stderr or compile_result.stdout or "Unknown py_compile error."
+
+
+def attempt_manim_code_compile_repair(
+    code: str,
+    pipeline_context: Optional[Dict[str, Any]],
+    compile_error: str,
+) -> Optional[str]:
+    """Ask the Manim repair model for one full-script syntax repair pass."""
+    parsed_input = dict((pipeline_context or {}).get("parsed_input") or {})
+    scene_planner = dict((pipeline_context or {}).get("scene_planner") or {})
+    if not parsed_input or not scene_planner:
+        return None
+
+    orchestrator = get_orchestrator()
+    retrieval_context = (
+        ((pipeline_context or {}).get("manim_code") or {}).get("_rag")
+        or {}
+    )
+    repaired = orchestrator.reasoner.repair_manim_code_syntax(
+        parsed_input,
+        scene_planner,
+        sanitize_generated_manim_code(code),
+        compile_error,
+        retrieval_context=retrieval_context,
+    )
+    repaired_code = sanitize_generated_manim_code((repaired or {}).get("text", ""))
+    return repaired_code or None
 
 
 def build_manim_compatibility_preamble() -> str:
@@ -770,6 +807,7 @@ def render_manim_video(
     render_label: str = "full-render",
     save_sections: bool = True,
     skip_before_section_index: Optional[int] = None,
+    pipeline_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Render generated Manim code and return the saved artifact metadata."""
     ensure_local_render_environment()
@@ -779,22 +817,39 @@ def render_manim_video(
     media_dir = render_dir / "media"
     media_dir.mkdir(parents=True, exist_ok=True)
 
-    base_script_path = render_dir / "generated_scene.py"
-    compatible_code = apply_manim_runtime_compatibility(sanitize_generated_manim_code(code))
-    base_script_path.write_text(compatible_code, encoding="utf-8")
+    def write_render_script(script_code: str) -> Tuple[Path, Path, str]:
+        base_path = render_dir / "generated_scene.py"
+        compatible = apply_manim_runtime_compatibility(sanitize_generated_manim_code(script_code))
+        base_path.write_text(compatible, encoding="utf-8")
 
-    render_script_path = base_script_path
-    if skip_before_section_index is not None and skip_before_section_index > 0:
-        render_script_path = render_dir / "generated_scene_partial.py"
-        render_script_path.write_text(
-            build_skip_sections_preamble(skip_before_section_index) + compatible_code,
-            encoding="utf-8",
+        active_path = base_path
+        if skip_before_section_index is not None and skip_before_section_index > 0:
+            active_path = render_dir / "generated_scene_partial.py"
+            active_path.write_text(
+                build_skip_sections_preamble(skip_before_section_index) + compatible,
+                encoding="utf-8",
+            )
+        return base_path, active_path, compatible
+
+    code_for_render = sanitize_generated_manim_code(code)
+    base_script_path, render_script_path, compatible_code = write_render_script(code_for_render)
+
+    compile_error = get_python_compile_error(render_script_path)
+    repaired_code = None
+    if compile_error is not None:
+        repaired_code = attempt_manim_code_compile_repair(code_for_render, pipeline_context, compile_error)
+        if repaired_code:
+            code_for_render = repaired_code
+            base_script_path, render_script_path, compatible_code = write_render_script(code_for_render)
+            compile_error = get_python_compile_error(render_script_path)
+    if compile_error is not None:
+        raise RuntimeError(
+            "Generated Manim code did not compile.\n"
+            + compile_error
         )
 
-    compile_python_script(render_script_path)
-
     # Detect scene classes from the original generated script.
-    scene_classes = detect_scene_classes(sanitize_generated_manim_code(code))
+    scene_classes = detect_scene_classes(code_for_render)
     if not scene_classes:
         raise RuntimeError("Could not find a Manim scene class in the generated code.")
 
@@ -866,6 +921,8 @@ def render_manim_video(
         "sections": sections,
         "stitched": False,
         "render_label": render_label,
+        "repaired_code": code_for_render if repaired_code else "",
+        "compile_repair_used": bool(repaired_code),
     }
 
 
@@ -1011,6 +1068,7 @@ def rerender_edited_video(
             quality,
             render_label="full-rerender-from-section-zero",
             save_sections=True,
+            pipeline_context=output.get("pipeline_result"),
         )
 
     if rerender_mode == "section" and not existing_sections:
@@ -1033,6 +1091,7 @@ def rerender_edited_video(
                 quality,
                 render_label="full-rerender-missing-prefix-sections",
                 save_sections=True,
+                pipeline_context=output.get("pipeline_result"),
             )
 
         partial_render = render_manim_video(
@@ -1042,6 +1101,7 @@ def rerender_edited_video(
             render_label=f"section-from-{start_index}",
             save_sections=True,
             skip_before_section_index=start_index,
+            pipeline_context=output.get("pipeline_result"),
         )
         updated_sections = list(partial_render.get("sections") or [])
         if not updated_sections:
@@ -1051,6 +1111,7 @@ def rerender_edited_video(
                 quality,
                 render_label="full-rerender-no-updated-sections",
                 save_sections=True,
+                pipeline_context=output.get("pipeline_result"),
             )
 
         merged_sections = merge_section_entries(existing_sections, updated_sections, start_index)
@@ -1067,6 +1128,7 @@ def rerender_edited_video(
                 quality,
                 render_label="full-rerender-audio-fallback",
                 save_sections=True,
+                pipeline_context=output.get("pipeline_result"),
             )
 
         rerender_result = dict(partial_render)
@@ -1084,6 +1146,7 @@ def rerender_edited_video(
         quality,
         render_label="full-rerender",
         save_sections=True,
+        pipeline_context=output.get("pipeline_result"),
     )
 
 
@@ -1183,7 +1246,18 @@ def run_pipeline(
             raise RuntimeError("The pipeline finished without generating Manim code.")
         if progress_callback is not None:
             progress_callback("render", f"Starting local Manim render at quality `{render_quality}`...")
-        render_result = render_manim_video(current_code, run_dir, render_quality, render_label="initial-render")
+        render_result = render_manim_video(
+            current_code,
+            run_dir,
+            render_quality,
+            render_label="initial-render",
+            pipeline_context=result,
+        )
+        repaired_code = str(render_result.get("repaired_code") or "")
+        if repaired_code:
+            current_code = sanitize_generated_manim_code(repaired_code)
+            result.setdefault("manim_code", {})["text"] = current_code
+            current_code_path.write_text(current_code + "\n", encoding="utf-8")
         if progress_callback is not None:
             kind = render_result.get("output_kind", "video")
             progress_callback("render", f"Manim render complete. Produced {kind}.")
@@ -1805,6 +1879,11 @@ def main() -> None:
                                 rerender_mode,
                                 section_index=selected_section_index,
                             )
+                            repaired_code = str(new_render_result.get("repaired_code") or "")
+                            if repaired_code:
+                                current_code = sanitize_generated_manim_code(repaired_code)
+                                output["pipeline_result"].setdefault("manim_code", {})["text"] = current_code
+                                Path(output["current_code_path"]).write_text(current_code + "\n", encoding="utf-8")
                             output["render_result"] = new_render_result
                             persist_bundle(output)
 
@@ -1813,6 +1892,8 @@ def main() -> None:
                             status.update(label="Edited render complete", state="complete")
 
                         st.session_state["xplainai_frontend_output"] = output
+                        if repaired_code:
+                            st.session_state["xplainai_editor_code"] = current_code
                         st.session_state["xplainai_rerender_notice"] = "Video rerendered from the edited code."
                         st.rerun()
                     except Exception as exc:

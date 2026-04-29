@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import logging
@@ -179,6 +180,17 @@ class MathematicalReasoner:
                 "Few-Shot Reference:\n{few_shot_reference}\n\n"
                 "Layout Guidance:\n{layout_guidance}\n\n"
                 "No-Overlap Rules:\n{no_overlap_guidance}\n\n"
+                "Existing Generated Code:\n{generated_code}\n"
+            ),
+            "manim_syntax_repair": (
+                "Repair this Manim Community Edition script so it becomes a complete, executable Python file.\n"
+                "Return the full corrected script only.\n\n"
+                "Parsed Topic: {topic}\n"
+                "Scene Planner:\n{scene_planner}\n\n"
+                "Few-Shot Reference:\n{few_shot_reference}\n\n"
+                "Layout Guidance:\n{layout_guidance}\n\n"
+                "No-Overlap Rules:\n{no_overlap_guidance}\n\n"
+                "Compile or Syntax Error:\n{compile_error}\n\n"
                 "Existing Generated Code:\n{generated_code}\n"
             ),
         }
@@ -678,6 +690,26 @@ class MathematicalReasoner:
         value = re.sub(r"(?im)^\s*```(?:python)?\s*$", "", value)
         value = re.sub(r"(?im)^\s*```\s*$", "", value)
         return value.strip()
+
+    def _manim_code_has_syntax_risk(self, code: str) -> bool:
+        value = str(code or "").strip()
+        if not value:
+            return True
+        try:
+            ast.parse(value)
+        except SyntaxError:
+            return True
+
+        lines = [line.rstrip() for line in value.splitlines() if line.strip()]
+        if not lines:
+            return True
+
+        tail = lines[-1]
+        if tail.endswith(("=", "(", "[", "{", ",", "\\", '"""', "'''")):
+            return True
+        if re.search(r'(?m)^\s*[rubfRUBF]*["\'][^"\']*$', value):
+            return True
+        return False
 
     def _box_reuse_has_stale_content_risk(self, code: str) -> bool:
         value = str(code or "")
@@ -1247,6 +1279,30 @@ class MathematicalReasoner:
         )
         return f"{prompt}\n\n{rag_block}"
 
+    def prepare_manim_syntax_repair_prompt(
+        self,
+        parsed_input: Dict[str, Any],
+        scene_planner: Dict[str, Any],
+        generated_code: str,
+        compile_error: str,
+        retrieval_context: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        template = self.solution_templates["manim_syntax_repair"]
+        prompt = template.format(
+            topic=parsed_input.get("topic", "the concept"),
+            scene_planner=str(scene_planner.get("text") or "").strip() or "Not available.",
+            few_shot_reference=self._read_prompt_asset("manim_few_shot_example.py") or "Not available.",
+            layout_guidance=self._read_prompt_asset("manim_layout_guidance.md") or "Not available.",
+            no_overlap_guidance=self._read_prompt_asset("manim_no_overlap_rules.md") or "Not available.",
+            compile_error=compile_error.strip() or "The script failed to compile.",
+            generated_code=generated_code,
+        )
+        rag_block = self.manim_kb.format_for_prompt(
+            retrieval_context,
+            "Retrieved Manim Knowledge Base Snippets:",
+        )
+        return f"{prompt}\n\n{rag_block}"
+
     def refine_manim_code_layout(
         self,
         parsed_input: Dict[str, Any],
@@ -1294,6 +1350,48 @@ class MathematicalReasoner:
             "_rag": retrieval_context or {},
         }
 
+    def repair_manim_code_syntax(
+        self,
+        parsed_input: Dict[str, Any],
+        scene_planner: Dict[str, Any],
+        generated_code: str,
+        compile_error: str,
+        retrieval_context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        total_start = perf_counter()
+        prompt = self.prepare_manim_syntax_repair_prompt(
+            parsed_input,
+            scene_planner,
+            generated_code,
+            compile_error,
+            retrieval_context=retrieval_context,
+        )
+        text, reasoning_content, timing = self._generate_text(
+            prompt,
+            system_prompt=(
+                "You are a Manim code repair specialist. Return one complete executable Python script only. "
+                "Repair syntax errors, truncation, unterminated strings, broken brackets, malformed MathTex/Tex "
+                "literals, and incomplete scene bodies. Preserve the original lesson intent, narration, and layout "
+                "helpers whenever possible, but finish any incomplete code paths so the file compiles cleanly."
+            ),
+            max_tokens=int(self.config.get("manim_layout_refiner_max_tokens", 8192)),
+            model_name=self.manim_layout_refiner_model,
+        )
+        code = self._clean_code_response(text)
+        return {
+            "text": code,
+            "_metadata": {
+                "model": self.manim_layout_refiner_model,
+                "timestamp": datetime.now().isoformat(),
+                "prompt_length_chars": len(prompt),
+                "total_time": round(perf_counter() - total_start, 3),
+                "_timing": timing,
+                "reasoning_signal_present": bool(reasoning_content),
+            },
+            "_prompt": prompt,
+            "_rag": retrieval_context or {},
+        }
+
     def generate_manim_code(
         self,
         parsed_input: Dict[str, Any],
@@ -1317,6 +1415,16 @@ class MathematicalReasoner:
             model_name=self.manim_code_model,
         )
         code = self._clean_code_response(text)
+        syntax_repair = None
+        if self._manim_code_has_syntax_risk(code):
+            syntax_repair = self.repair_manim_code_syntax(
+                parsed_input,
+                scene_planner,
+                code,
+                "The generated script appears truncated or syntactically invalid before compile time.",
+                retrieval_context=rag_context,
+            )
+            code = self._clean_code_response((syntax_repair or {}).get("text", code))
         refined = None
         if self._manim_code_has_overlap_risk(code):
             refined = self.refine_manim_code_layout(
@@ -1326,6 +1434,15 @@ class MathematicalReasoner:
                 retrieval_context=rag_context,
             )
             code = self._clean_code_response((refined or {}).get("text", code))
+        if self._manim_code_has_syntax_risk(code):
+            syntax_repair = self.repair_manim_code_syntax(
+                parsed_input,
+                scene_planner,
+                code,
+                "The script still appears syntactically unsafe after layout refinement. Return a full compileable rewrite.",
+                retrieval_context=rag_context,
+            )
+            code = self._clean_code_response((syntax_repair or {}).get("text", code))
         return {
             "text": code,
             "_metadata": {
@@ -1336,11 +1453,15 @@ class MathematicalReasoner:
                 "_timing": timing,
                 "reasoning_signal_present": bool(reasoning_content),
                 "layout_refiner_used": bool(refined),
+                "syntax_repair_used": bool(syntax_repair),
                 "layout_refiner_model": (refined or {}).get("_metadata", {}).get("model"),
                 "layout_refiner_timing": (refined or {}).get("_metadata", {}).get("_timing", {}),
+                "syntax_repair_model": (syntax_repair or {}).get("_metadata", {}).get("model"),
+                "syntax_repair_timing": (syntax_repair or {}).get("_metadata", {}).get("_timing", {}),
             },
             "_prompt": prompt,
             "_layout_refiner": refined,
+            "_syntax_repair": syntax_repair,
             "_rag": rag_context,
         }
 
