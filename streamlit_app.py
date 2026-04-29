@@ -382,11 +382,23 @@ def attempt_manim_code_compile_repair(
         return None
 
     orchestrator = get_orchestrator()
+    reasoner = orchestrator.reasoner
+    if not hasattr(reasoner, "repair_manim_code_syntax"):
+        # Streamlit can keep an older cached orchestrator alive across code reloads.
+        try:
+            get_orchestrator.clear()  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        orchestrator = SolutionOrchestrator("config/config.yaml")
+        reasoner = orchestrator.reasoner
+    if not hasattr(reasoner, "repair_manim_code_syntax"):
+        return None
+
     retrieval_context = (
         ((pipeline_context or {}).get("manim_code") or {}).get("_rag")
         or {}
     )
-    repaired = orchestrator.reasoner.repair_manim_code_syntax(
+    repaired = reasoner.repair_manim_code_syntax(
         parsed_input,
         scene_planner,
         sanitize_generated_manim_code(code),
@@ -1258,6 +1270,10 @@ def run_pipeline(
             current_code = sanitize_generated_manim_code(repaired_code)
             result.setdefault("manim_code", {})["text"] = current_code
             current_code_path.write_text(current_code + "\n", encoding="utf-8")
+        result.setdefault("manim_code", {})["_compile_repair"] = {
+            "used": bool(render_result.get("compile_repair_used")),
+            "repaired_code": repaired_code,
+        }
         if progress_callback is not None:
             kind = render_result.get("output_kind", "video")
             progress_callback("render", f"Manim render complete. Produced {kind}.")
@@ -1713,7 +1729,7 @@ def main() -> None:
         metrics[4].metric("Code", f"{(timings.get('manim_code_timing') or {}).get('generation_seconds', 0):.2f}s")
         metrics[5].metric("Total", f"{timings.get('total_pipeline_seconds', 0):.2f}s")
 
-        tabs = st.tabs(["Visualization", "Parsed JSON", "Solution", "Verification", "RAG", "Scene Planner", "Manim Code", "Artifacts"])
+        tabs = st.tabs(["Visualization", "Parsed JSON", "Solution", "Verification", "RAG", "Scene Planner", "Manim Code", "Syntax Repair", "Artifacts"])
 
         with tabs[0]:
             st.subheader("Visualization")
@@ -1884,6 +1900,10 @@ def main() -> None:
                                 current_code = sanitize_generated_manim_code(repaired_code)
                                 output["pipeline_result"].setdefault("manim_code", {})["text"] = current_code
                                 Path(output["current_code_path"]).write_text(current_code + "\n", encoding="utf-8")
+                            output["pipeline_result"].setdefault("manim_code", {})["_compile_repair"] = {
+                                "used": bool(new_render_result.get("compile_repair_used")),
+                                "repaired_code": repaired_code,
+                            }
                             output["render_result"] = new_render_result
                             persist_bundle(output)
 
@@ -1902,6 +1922,31 @@ def main() -> None:
                 st.code(st.session_state.get("xplainai_code_editor", ""), language="python")
 
         with tabs[7]:
+            st.subheader("Syntax Repair")
+            manim_code_payload = result.get("manim_code", {}) or {}
+            syntax_repair = manim_code_payload.get("_syntax_repair") or {}
+            compile_repair = manim_code_payload.get("_compile_repair") or {}
+
+            if syntax_repair:
+                st.success("The generator-side syntax repair layer was used for this script.")
+                st.json((syntax_repair.get("_metadata") or {}))
+                repaired_text = str(syntax_repair.get("text") or "").strip()
+                if repaired_text:
+                    with st.expander("Generator-side repaired script", expanded=False):
+                        st.code(repaired_text, language="python")
+            else:
+                st.info("The generator-side syntax repair layer was not used for this run.")
+
+            if compile_repair.get("used"):
+                st.success("A compile-time repair pass was also used before render.")
+                repaired_text = str(compile_repair.get("repaired_code") or "").strip()
+                if repaired_text:
+                    with st.expander("Compile-time repaired script", expanded=False):
+                        st.code(repaired_text, language="python")
+            else:
+                st.info("No compile-time repair pass was needed before render.")
+
+        with tabs[8]:
             st.subheader("Downloads")
             render_saved_artifact_buttons(saved_files, render_result)
             current_code_path = Path(output["current_code_path"])
