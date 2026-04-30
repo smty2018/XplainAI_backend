@@ -1,4 +1,8 @@
-"""Scrape Manim docs and example scenes into the local KB seed directory."""
+"""Scrape Manim docs and example scenes into the local KB seed directory.
+
+The scraper writes normalized markdown and code files so the RAG index can use
+them later without needing live web access.
+"""
 
 from __future__ import annotations
 
@@ -55,6 +59,7 @@ class ManimKnowledgeScraper:
         max_doc_pages: int = 250,
         max_example_files: int = 200,
     ) -> Dict[str, Any]:
+        """Run both scrape paths and write one manifest that records what was captured."""
         # Record a manifest for each scrape so the indexed inputs remain auditable.
         self._ensure_dirs()
         docs_result = self.scrape_docs(doc_seed_urls or DEFAULT_DOC_SEEDS, max_pages=max_doc_pages)

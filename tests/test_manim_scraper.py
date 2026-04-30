@@ -18,6 +18,7 @@ class FakeResponse:
         self.encoding = "utf-8"
 
     def raise_for_status(self):
+        """Mirror the part of requests.Response used by the scraper."""
         if self.status_code >= 400:
             raise RuntimeError(f"HTTP {self.status_code}")
 
@@ -33,6 +34,7 @@ class FakeSession:
         self.headers = {}
 
     def get(self, url, timeout=None):
+        """Return the canned response so tests stay deterministic and offline."""
         if url not in self.mapping:
             raise RuntimeError(f"Unexpected URL: {url}")
         return self.mapping[url]
@@ -46,6 +48,7 @@ class ManimScraperTests(unittest.TestCase):
         self.temp_dir = Path(tempfile.mkdtemp(prefix="manim_scraper_test_"))
 
     def _make_scraper(self, mapping):
+        """Build the scraper with a fake session and an isolated output directory."""
         # Use a fake session to test crawl behavior deterministically without network access.
         session = FakeSession(mapping)
         return ManimKnowledgeScraper(output_dir=self.temp_dir / "scraped", session=session)

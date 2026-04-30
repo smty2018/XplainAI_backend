@@ -1,4 +1,8 @@
-"""Post-solution verification helpers for math and engineering outputs."""
+"""Post-solution verification helpers for math and engineering outputs.
+
+The verifier is intentionally lightweight. It is meant to catch obvious math
+or unit mismatches before visualization, not replace a full formal proof.
+"""
 
 from __future__ import annotations
 
@@ -136,6 +140,7 @@ class VerificationEngine:
         }
 
     def _normalize_requested_checks(self, raw: Any, parsed_input: Dict[str, Any]) -> Dict[str, bool]:
+        # If the parser did not ask for checks explicitly, infer the useful ones from equations and units.
         base = {
             "sympy": False,
             "unit_check": False,
@@ -458,6 +463,7 @@ class VerificationEngine:
         variable_names: Sequence[str],
         local_dict: Dict[str, Any],
     ) -> Dict[str, Any]:
+        # Simple "x = ..." extraction is enough here and keeps the verification pass cheap.
         search_text = final_answer_text or full_text
         normalized = self._normalize_math_text(search_text)
         assignments: Dict[str, Any] = {}
@@ -483,6 +489,7 @@ class VerificationEngine:
         llm_assignments: Dict[str, Any],
         final_answer_text: str,
     ) -> Tuple[str, List[str], List[str]]:
+        # The comparison focuses on whether the math agrees, not whether the formatting is identical.
         if sp is None:
             return "unknown", [], ["SymPy is unavailable, so comparison could not run."]
 

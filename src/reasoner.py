@@ -1,4 +1,8 @@
-"""Reasoning engine for mathematical and physics problem solving."""
+"""Reasoning engine for mathematical and physics problem solving.
+
+This module owns the middle of the pipeline: once input is parsed, we solve it,
+verify it, plan the animation, and generate Manim code plus any repair prompts.
+"""
 
 from __future__ import annotations
 
@@ -192,6 +196,28 @@ class MathematicalReasoner:
                 "No-Overlap Rules:\n{no_overlap_guidance}\n\n"
                 "Compile or Syntax Error:\n{compile_error}\n\n"
                 "Existing Generated Code:\n{generated_code}\n"
+            ),
+            "manim_block_repair": (
+                "Repair only the broken block from this Manim Community Edition script.\n"
+                "Return only the replacement code block, with the same indentation level as the original block.\n\n"
+                "Parsed Topic: {topic}\n"
+                "Scene Planner:\n{scene_planner}\n\n"
+                "Compile or Syntax Error:\n{compile_error}\n\n"
+                "Replacement Block Starts At Line: {block_start_line}\n"
+                "Replacement Block Ends At Line: {block_end_line}\n\n"
+                "Context Before Block:\n{context_before}\n\n"
+                "Broken Block:\n{broken_block}\n\n"
+                "Context After Block:\n{context_after}\n"
+            ),
+            "manim_continuation_repair": (
+                "Continue this truncated Manim Community Edition script from the last intact line.\n"
+                "Return only the missing continuation lines. Do not repeat the existing prefix.\n\n"
+                "Parsed Topic: {topic}\n"
+                "Scene Planner:\n{scene_planner}\n\n"
+                "Compile or Syntax Error:\n{compile_error}\n\n"
+                "Last Intact Line Number: {last_intact_line}\n\n"
+                "Stable Prefix Context:\n{prefix_context}\n\n"
+                "Truncated Tail Starting Point:\n{truncated_tail}\n"
             ),
         }
 
@@ -492,6 +518,7 @@ class MathematicalReasoner:
         max_tokens: Optional[int] = None,
         model_name: Optional[str] = None,
     ) -> tuple[str, str, Dict[str, Union[str, float, bool, int]]]:
+        # Funnel all LLM calls through one helper so retries, timing, and token accounting stay consistent.
         start = perf_counter()
         active_model_name = model_name or self.model_name
         base_max_tokens = int(
@@ -511,6 +538,7 @@ class MathematicalReasoner:
         max_tokens_used = base_max_tokens
 
         for max_tokens in token_attempts:
+            # A second attempt with a larger budget helps long planners and code blocks avoid truncation.
             payload = {
                 "model": active_model_name,
                 "messages": [
@@ -900,6 +928,72 @@ class MathematicalReasoner:
 
         return False
 
+    def _manim_code_has_table_density_risk(self, code: str) -> bool:
+        value = str(code or "")
+        if not value.strip():
+            return True
+
+        header_lists = re.findall(r"(?ms)header_texts\s*=\s*\[(.*?)\]", value)
+        rows_data_lists = re.findall(r"(?ms)rows_data\s*=\s*\[(.*?)\]", value)
+        col_width_lists = re.findall(r"(?ms)col_widths\s*=\s*\[(.*?)\]", value)
+
+        def _quoted_strings(blob: str) -> List[str]:
+            return [
+                match.group(1) or match.group(2) or ""
+                for match in re.finditer(r'"([^"\\]*(?:\\.[^"\\]*)*)"|\'([^\'\\]*(?:\\.[^\'\\]*)*)\'', blob)
+            ]
+
+        header_cells: List[str] = []
+        for blob in header_lists:
+            header_cells.extend(_quoted_strings(blob))
+
+        data_cells: List[str] = []
+        row_count = 0
+        for blob in rows_data_lists:
+            data_cells.extend(_quoted_strings(blob))
+            row_count += len(re.findall(r"(?m)^\s*\(", blob))
+
+        column_count = 0
+        if header_cells:
+            column_count = len(header_cells)
+        elif col_width_lists:
+            for blob in col_width_lists:
+                column_count = max(
+                    column_count,
+                    len([part for part in blob.split(",") if part.strip()]),
+                )
+
+        long_headers = [cell for cell in header_cells if len(cell.strip()) >= 16]
+        verbose_cells = [cell for cell in data_cells if len(cell.strip()) >= 28]
+        sentence_like_cells = [
+            cell
+            for cell in data_cells
+            if any(token in cell for token in [".", ";", "\n", " and ", " or ", ":"])
+        ]
+        explicit_small_fonts = [
+            int(size)
+            for size in re.findall(r"Text\([^\n]*?font_size\s*=\s*(\d+)", value)
+            if int(size) <= 20
+        ]
+
+        # A wide table with prose-heavy cells almost always needs to be split into scenes or cards.
+        if column_count >= 4 and row_count >= 4 and (verbose_cells or sentence_like_cells):
+            return True
+        if column_count >= 5 and row_count >= 3:
+            return True
+        if column_count >= 4 and long_headers and row_count >= 3:
+            return True
+        if column_count >= 4 and len(explicit_small_fonts) >= 2:
+            return True
+
+        # Guard the built-in Manim Table helper too, even when the surrounding variable names differ.
+        if "Table(" in value:
+            table_rows = len(re.findall(r"(?m)^\s*\[", value))
+            if table_rows >= 4 and (column_count >= 4 or len(verbose_cells) >= 4):
+                return True
+
+        return False
+
     def _manim_code_has_scene_density_risk(self, code: str) -> bool:
         value = str(code or "")
         if not value.strip():
@@ -1000,6 +1094,7 @@ class MathematicalReasoner:
             r"MathTex\([^\n]*weight\s*=",
             r"Tex\([^\n]*weight\s*=",
             r"else\s+None",
+            r"VGroup\(\s*\*\s*(?:list\(\s*)?self\.mobjects(?:\s*\))?\s*\)",
         ]
         if any(re.search(pattern, value, flags=re.MULTILINE) for pattern in risky_patterns):
             return True
@@ -1032,6 +1127,8 @@ class MathematicalReasoner:
         if self._manim_code_has_graph_region_risk(value):
             return True
         if self._manim_code_has_readability_risk(value):
+            return True
+        if self._manim_code_has_table_density_risk(value):
             return True
         if self._manim_code_has_scene_density_risk(value):
             return True
@@ -1128,6 +1225,7 @@ class MathematicalReasoner:
         parsed_input: Dict[str, Any],
         solution: Dict[str, Any],
     ) -> Dict[str, Any]:
+        # Retrieval happens before planning so the planner sees layout and pedagogy examples, not just the math.
         total_start = perf_counter()
         rag_context = self.manim_kb.retrieve_for_scene_planner(parsed_input, solution)
         prompt = self.prepare_scene_planner_prompt(parsed_input, solution, rag_context)
@@ -1217,6 +1315,8 @@ class MathematicalReasoner:
                 "- If the region is described as being under a curve and above the x-axis, the lower boundary must be the x-axis, not a straight line joining the endpoints of the curve.",
                 "- Keep explanatory text and formulas readable. Do not shrink main prose, derivation lines, or answer text below roughly `font_size=28` just to force everything into one scene.",
                 "- If a derivation becomes too dense, split it across more scenes or larger boxes instead of compressing it into tiny text.",
+                "- Do not force a prose-heavy comparison table onto one 16:9 frame. If a table has more than about 3 columns of text, long sentence-style cells, or many comparison rows, split it into multiple scenes, smaller subtables, or method cards.",
+                "- Use tables only for genuinely compact data. If cells contain explanations or assumptions in sentence form, convert them into stacked cards, per-method panels, or phased comparison scenes instead of a single oversized table.",
                 "- Budget boxes from content, not the other way around. If a stack has 3 or 4 derivation lines, give it enough vertical height so `fit_to_box(...)` does not shrink everything into tiny text.",
                 "- Do not put multi-line answer cards, summary panels, or exact-form notes into very short result boxes. If a result panel has two lines or a surrounding rectangle, give it a comfortably tall box or split the content.",
                 "- For stacked derivations, plan roughly one readable text row per line. If the box cannot support that, split the scene or reduce simultaneous content instead of letting the auto-fit helper miniaturize the text.",
@@ -1245,6 +1345,7 @@ class MathematicalReasoner:
                 "- Follow the Scene Planner faithfully and do not invent missing numeric details.",
                 "- If the Scene Planner leaves a visual detail unspecified, implement the safest minimal version.",
                 "- Every `VGroup` must contain only Mobjects. Never place raw coordinates, numpy arrays, or scalar values inside `VGroup`.",
+                "- Do not wrap `self.mobjects` in `VGroup(...)` when clearing a scene. If you need to fade out every current mobject, use `Group(*self.mobjects)` or fade them out individually.",
                 "- Build formula mobjects explicitly before wrapping them in `SurroundingRectangle` or grouped animations.",
                 "- Use `Text(...)` for prose titles, subtitles, and sentence-style labels. Reserve `MathTex(...)` and `Tex(...)` for mathematical notation or LaTeX content.",
                 "- Do not pass `weight=...`, `slant=...`, or font-family styling kwargs to `MathTex` or `Tex`; those belong on `Text`.",
@@ -1303,6 +1404,62 @@ class MathematicalReasoner:
         )
         return f"{prompt}\n\n{rag_block}"
 
+    def prepare_manim_block_repair_prompt(
+        self,
+        parsed_input: Dict[str, Any],
+        scene_planner: Dict[str, Any],
+        broken_block: str,
+        compile_error: str,
+        *,
+        block_start_line: int,
+        block_end_line: int,
+        context_before: str,
+        context_after: str,
+        retrieval_context: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        template = self.solution_templates["manim_block_repair"]
+        prompt = template.format(
+            topic=parsed_input.get("topic", "the concept"),
+            scene_planner=str(scene_planner.get("text") or "").strip() or "Not available.",
+            compile_error=compile_error.strip() or "The script failed to compile.",
+            block_start_line=block_start_line,
+            block_end_line=block_end_line,
+            context_before=context_before or "Not available.",
+            broken_block=broken_block,
+            context_after=context_after or "Not available.",
+        )
+        rag_block = self.manim_kb.format_for_prompt(
+            retrieval_context,
+            "Retrieved Manim Knowledge Base Snippets:",
+        )
+        return f"{prompt}\n\n{rag_block}"
+
+    def prepare_manim_continuation_repair_prompt(
+        self,
+        parsed_input: Dict[str, Any],
+        scene_planner: Dict[str, Any],
+        prefix_context: str,
+        truncated_tail: str,
+        compile_error: str,
+        *,
+        last_intact_line: int,
+        retrieval_context: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        template = self.solution_templates["manim_continuation_repair"]
+        prompt = template.format(
+            topic=parsed_input.get("topic", "the concept"),
+            scene_planner=str(scene_planner.get("text") or "").strip() or "Not available.",
+            compile_error=compile_error.strip() or "The script appears truncated.",
+            last_intact_line=last_intact_line,
+            prefix_context=prefix_context or "Not available.",
+            truncated_tail=truncated_tail or "Not available.",
+        )
+        rag_block = self.manim_kb.format_for_prompt(
+            retrieval_context,
+            "Retrieved Manim Knowledge Base Snippets:",
+        )
+        return f"{prompt}\n\n{rag_block}"
+
     def refine_manim_code_layout(
         self,
         parsed_input: Dict[str, Any],
@@ -1329,8 +1486,10 @@ class MathematicalReasoner:
                 "as a final safety step where crowding could occur. When a formula box is reused across scenes, the "
                 "previous formula group must be explicitly replaced or removed before the next one is revealed. Fix any "
                 "incorrect shaded region so it matches the stated mathematical boundaries exactly, and enlarge or split "
-                "dense text instead of shrinking it below comfortable reading size. Add concise humanlike comments before "
-                "major scene sections and any non-obvious layout or animation choices."
+                "dense text instead of shrinking it below comfortable reading size. If the script tries to show a wide "
+                "prose-heavy table, restructure it into multiple scenes, smaller subtables, or stacked method cards instead "
+                "of squeezing every column onto one frame. Add concise humanlike comments before major scene sections and any "
+                "non-obvious layout or animation choices."
             ),
             max_tokens=int(self.config.get("manim_layout_refiner_max_tokens", 8192)),
             model_name=self.manim_layout_refiner_model,
@@ -1392,6 +1551,102 @@ class MathematicalReasoner:
             "_rag": retrieval_context or {},
         }
 
+    def repair_manim_code_block(
+        self,
+        parsed_input: Dict[str, Any],
+        scene_planner: Dict[str, Any],
+        broken_block: str,
+        compile_error: str,
+        *,
+        block_start_line: int,
+        block_end_line: int,
+        context_before: str,
+        context_after: str,
+        retrieval_context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        total_start = perf_counter()
+        prompt = self.prepare_manim_block_repair_prompt(
+            parsed_input,
+            scene_planner,
+            broken_block,
+            compile_error,
+            block_start_line=block_start_line,
+            block_end_line=block_end_line,
+            context_before=context_before,
+            context_after=context_after,
+            retrieval_context=retrieval_context,
+        )
+        text, reasoning_content, timing = self._generate_text(
+            prompt,
+            system_prompt=(
+                "You are a Manim code repair specialist. Return only the corrected replacement block. "
+                "Do not rewrite the whole file. Preserve the surrounding API, names, narration flow, and indentation. "
+                "Close open calls, strings, and brackets, and keep the repaired block executable inside the existing script."
+            ),
+            max_tokens=int(self.config.get("manim_layout_refiner_max_tokens", 8192)),
+            model_name=self.manim_layout_refiner_model,
+        )
+        code = self._clean_code_response(text)
+        return {
+            "text": code,
+            "_metadata": {
+                "model": self.manim_layout_refiner_model,
+                "timestamp": datetime.now().isoformat(),
+                "prompt_length_chars": len(prompt),
+                "total_time": round(perf_counter() - total_start, 3),
+                "_timing": timing,
+                "reasoning_signal_present": bool(reasoning_content),
+            },
+            "_prompt": prompt,
+            "_rag": retrieval_context or {},
+        }
+
+    def continue_manim_code_from_tail(
+        self,
+        parsed_input: Dict[str, Any],
+        scene_planner: Dict[str, Any],
+        prefix_context: str,
+        truncated_tail: str,
+        compile_error: str,
+        *,
+        last_intact_line: int,
+        retrieval_context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        total_start = perf_counter()
+        prompt = self.prepare_manim_continuation_repair_prompt(
+            parsed_input,
+            scene_planner,
+            prefix_context,
+            truncated_tail,
+            compile_error,
+            last_intact_line=last_intact_line,
+            retrieval_context=retrieval_context,
+        )
+        text, reasoning_content, timing = self._generate_text(
+            prompt,
+            system_prompt=(
+                "You are a Manim code continuation specialist. Return only the missing continuation lines after the "
+                "given prefix. Do not repeat earlier lines. Finish the current statement, then complete the rest of "
+                "the script cleanly so the final file compiles."
+            ),
+            max_tokens=int(self.config.get("manim_layout_refiner_max_tokens", 8192)),
+            model_name=self.manim_layout_refiner_model,
+        )
+        code = self._clean_code_response(text)
+        return {
+            "text": code,
+            "_metadata": {
+                "model": self.manim_layout_refiner_model,
+                "timestamp": datetime.now().isoformat(),
+                "prompt_length_chars": len(prompt),
+                "total_time": round(perf_counter() - total_start, 3),
+                "_timing": timing,
+                "reasoning_signal_present": bool(reasoning_content),
+            },
+            "_prompt": prompt,
+            "_rag": retrieval_context or {},
+        }
+
     def generate_manim_code(
         self,
         parsed_input: Dict[str, Any],
@@ -1417,6 +1672,7 @@ class MathematicalReasoner:
         code = self._clean_code_response(text)
         syntax_repair = None
         if self._manim_code_has_syntax_risk(code):
+            # Catch obvious truncation before the script reaches the compile stage in Streamlit.
             syntax_repair = self.repair_manim_code_syntax(
                 parsed_input,
                 scene_planner,
@@ -1427,6 +1683,7 @@ class MathematicalReasoner:
             code = self._clean_code_response((syntax_repair or {}).get("text", code))
         refined = None
         if self._manim_code_has_overlap_risk(code):
+            # Layout refinement is narrower than code generation: keep the lesson, fix the scene geometry.
             refined = self.refine_manim_code_layout(
                 parsed_input,
                 scene_planner,
@@ -1608,6 +1865,7 @@ class SolutionOrchestrator:
         generate_manim_code: bool = False,
         progress_callback: Optional[Callable[[str, str], None]] = None,
     ) -> Dict[str, Any]:
+        # This is the high-level contract used by both the CLI and the Streamlit app.
         start = perf_counter()
         self._emit_progress(progress_callback, "cache", "Checking cached pipeline result...")
         cache_key = self._hash_input(
@@ -1647,6 +1905,7 @@ class SolutionOrchestrator:
         )
         solution = self.reasoner.generate_solution(parsed, include_reasoning_trace=include_reasoning_trace)
         self._emit_progress(progress_callback, "reason", "Reasoning step complete.")
+        # Verification lives between solving and visualization so incorrect math does not flow downstream.
         self._emit_progress(progress_callback, "verification", "Running post-solution verification checks...")
         verification = self.verifier.run(parsed, solution)
         revision_attempted = False

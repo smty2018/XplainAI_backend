@@ -26,6 +26,7 @@ try:
 except ImportError:
     imageio_ffmpeg = None
 
+from src.manim_compile_repair import ManimCompileRepairEngine
 from src.parser_replicate_vl2 import ReplicateDeepSeekVL2Parser
 from src.reasoner import SolutionOrchestrator
 
@@ -54,6 +55,7 @@ RENDER_MODULE_REQUIREMENTS: List[Tuple[str, str]] = [
 ]
 
 
+# Cached service constructors -------------------------------------------------
 @st.cache_resource(show_spinner=False)
 def get_orchestrator() -> SolutionOrchestrator:
     """Return a cached orchestrator instance for the current Streamlit process."""
@@ -91,6 +93,7 @@ def make_render_dir(run_dir: Path, label: str) -> Path:
     return render_dir
 
 
+# Local render environment helpers -------------------------------------------
 def get_missing_render_packages() -> List[str]:
     """Return the Python packages required for local Manim rendering that are missing."""
     missing: List[str] = []
@@ -211,6 +214,18 @@ def sanitize_generated_manim_code(code: str) -> str:
             break
     value = "\n".join(lines[start_index:]).strip()
     value = normalize_plot_lambda_fallbacks(value)
+    # `self.mobjects` can include plain Group instances, so wrapping the whole list
+    # in VGroup is unsafe even though the file still compiles.
+    value = re.sub(
+        r"VGroup\(\s*\*\s*list\(\s*self\.mobjects\s*\)\s*\)",
+        "Group(*self.mobjects)",
+        value,
+    )
+    value = re.sub(
+        r"VGroup\(\s*\*\s*self\.mobjects\s*\)",
+        "Group(*self.mobjects)",
+        value,
+    )
     return value
 
 
@@ -352,34 +367,42 @@ def compile_python_script(script_path: Path) -> None:
 
 
 def get_python_compile_error(script_path: Path) -> Optional[str]:
-    """Return the py_compile error text for a script, or None when it compiles."""
-    # Keep compile probing separate so the render path can attempt one automatic repair pass.
-    compile_cmd = [sys.executable, "-m", "py_compile", str(script_path)]
-    compile_result = subprocess.run(
-        compile_cmd,
-        cwd=PROJECT_ROOT,
-        env=build_python_subprocess_env(),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=120,
-    )
-    if compile_result.returncode == 0:
+    """Return syntax/compile error text for a script, or None when it compiles."""
+    # Keep this check in-memory so it works even when the runtime cannot write .pyc files.
+    try:
+        source = script_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        source = script_path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return str(exc)
+
+    try:
+        compile(source, str(script_path), "exec")
         return None
-    return compile_result.stderr or compile_result.stdout or "Unknown py_compile error."
+    except SyntaxError as exc:
+        lines = [f'  File "{script_path}", line {exc.lineno or 1}']
+        if exc.text:
+            snippet = exc.text.rstrip("\n")
+            lines.append(f"    {snippet}")
+            if exc.offset:
+                lines.append("    " + " " * max(0, int(exc.offset) - 1) + "^")
+        lines.append(f"{type(exc).__name__}: {exc.msg}")
+        return "\n".join(lines)
+    except Exception as exc:
+        return f"{type(exc).__name__}: {exc}"
 
 
+# Compile-repair orchestration ------------------------------------------------
 def attempt_manim_code_compile_repair(
     code: str,
     pipeline_context: Optional[Dict[str, Any]],
     compile_error: str,
-) -> Optional[str]:
-    """Ask the Manim repair model for one full-script syntax repair pass."""
+) -> Tuple[Optional[str], Dict[str, Any]]:
+    """Delegate compile repair to the shared engine while keeping Streamlit context local."""
     parsed_input = dict((pipeline_context or {}).get("parsed_input") or {})
     scene_planner = dict((pipeline_context or {}).get("scene_planner") or {})
     if not parsed_input or not scene_planner:
-        return None
+        return None, {}
 
     orchestrator = get_orchestrator()
     reasoner = orchestrator.reasoner
@@ -392,23 +415,61 @@ def attempt_manim_code_compile_repair(
         orchestrator = SolutionOrchestrator("config/config.yaml")
         reasoner = orchestrator.reasoner
     if not hasattr(reasoner, "repair_manim_code_syntax"):
-        return None
+        return None, {}
 
     retrieval_context = (
         ((pipeline_context or {}).get("manim_code") or {}).get("_rag")
         or {}
     )
-    repaired = reasoner.repair_manim_code_syntax(
-        parsed_input,
-        scene_planner,
-        sanitize_generated_manim_code(code),
+
+    repair_engine = ManimCompileRepairEngine(sanitize_generated_manim_code)
+
+    def repair_block(**kwargs: Any) -> Dict[str, Any]:
+        # Keep Streamlit-specific context assembly here so the shared repair engine stays framework-agnostic.
+        return reasoner.repair_manim_code_block(
+            parsed_input,
+            scene_planner,
+            kwargs["broken_block"],
+            kwargs["compile_error"],
+            block_start_line=int(kwargs["block_start_line"]),
+            block_end_line=int(kwargs["block_end_line"]),
+            context_before=str(kwargs["context_before"]),
+            context_after=str(kwargs["context_after"]),
+            retrieval_context=retrieval_context,
+        )
+
+    def continue_from_tail(**kwargs: Any) -> Dict[str, Any]:
+        return reasoner.continue_manim_code_from_tail(
+            parsed_input,
+            scene_planner,
+            str(kwargs["prefix_context"]),
+            str(kwargs["truncated_tail"]),
+            kwargs["compile_error"],
+            last_intact_line=int(kwargs["last_intact_line"]),
+            retrieval_context=retrieval_context,
+        )
+
+    def repair_full_script(**kwargs: Any) -> Dict[str, Any]:
+        return reasoner.repair_manim_code_syntax(
+            parsed_input,
+            scene_planner,
+            str(kwargs["generated_code"]),
+            kwargs["compile_error"],
+            retrieval_context=retrieval_context,
+        )
+
+    return repair_engine.attempt_repair(
+        code,
         compile_error,
-        retrieval_context=retrieval_context,
+        repair_block=repair_block if hasattr(reasoner, "repair_manim_code_block") else None,
+        continue_from_tail=(
+            continue_from_tail if hasattr(reasoner, "continue_manim_code_from_tail") else None
+        ),
+        repair_full_script=repair_full_script,
     )
-    repaired_code = sanitize_generated_manim_code((repaired or {}).get("text", ""))
-    return repaired_code or None
 
 
+# Manim runtime compatibility layer ------------------------------------------
 def build_manim_compatibility_preamble() -> str:
     """Build a Python preamble that patches common Manim compatibility issues."""
     # Inject runtime compatibility helpers required by generated Manim scenes.
@@ -420,6 +481,18 @@ def build_manim_compatibility_preamble() -> str:
     }
     lines = [
         "# XplainAI Manim runtime compatibility helpers",
+        "try:",
+        "    from manim import *",
+        "except Exception:",
+        "    pass",
+        "try:",
+        "    from manim_voiceover import VoiceoverScene",
+        "except Exception:",
+        "    pass",
+        "try:",
+        "    import numpy as np",
+        "except Exception:",
+        "    pass",
         "try:",
         "    import sys as _xplainai_sys",
         "    if hasattr(_xplainai_sys.stdout, 'reconfigure'):",
@@ -705,7 +778,16 @@ def apply_manim_runtime_compatibility(code: str) -> str:
     lines = content.splitlines(keepends=True)
     insert_at = 0
 
+    if lines and lines[0].startswith("#!"):
+        insert_at = 1
+
+    while insert_at < len(lines) and lines[insert_at].strip().startswith("#"):
+        insert_at += 1
+
     while insert_at < len(lines) and lines[insert_at].startswith("from __future__ import "):
+        insert_at += 1
+
+    while insert_at < len(lines) and lines[insert_at].strip() == "":
         insert_at += 1
 
     while insert_at < len(lines):
@@ -750,6 +832,7 @@ def build_skip_sections_preamble(skip_before_section_index: int) -> str:
 
 def build_python_subprocess_env() -> Dict[str, str]:
     """Return subprocess environment variables for Python-based render steps."""
+    # Streamlit can be launched from several Python environments on one machine, so we pin render settings here.
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUTF8"] = "1"
@@ -822,6 +905,7 @@ def render_manim_video(
     pipeline_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Render generated Manim code and return the saved artifact metadata."""
+    # This is the strict gate before a user sees output: sanitize, compile, repair if needed, then render.
     ensure_local_render_environment()
 
     # Use an isolated render directory for each render attempt.
@@ -848,8 +932,13 @@ def render_manim_video(
 
     compile_error = get_python_compile_error(render_script_path)
     repaired_code = None
+    compile_repair_info: Dict[str, Any] = {}
     if compile_error is not None:
-        repaired_code = attempt_manim_code_compile_repair(code_for_render, pipeline_context, compile_error)
+        repaired_code, compile_repair_info = attempt_manim_code_compile_repair(
+            code_for_render,
+            pipeline_context,
+            compile_error,
+        )
         if repaired_code:
             code_for_render = repaired_code
             base_script_path, render_script_path, compatible_code = write_render_script(code_for_render)
@@ -935,6 +1024,7 @@ def render_manim_video(
         "render_label": render_label,
         "repaired_code": code_for_render if repaired_code else "",
         "compile_repair_used": bool(repaired_code),
+        "compile_repair_info": compile_repair_info,
     }
 
 
@@ -1065,6 +1155,7 @@ def rerender_edited_video(
     section_index: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Rerender edited code either fully or from a chosen section onward."""
+    # Rerenders stay inside the same run bundle so the latest code and media remain easy to inspect together.
     # Fall back to a full render when saved section boundaries are not reliable.
     run_dir = Path(output["run_dir"])
     current_render = output.get("render_result") or {}
@@ -1175,6 +1266,7 @@ def run_pipeline(
     progress_callback: Optional[Callable[[str, str], None]] = None,
 ) -> Dict[str, Any]:
     """Run the parser, reasoning, and optional render stages for one request."""
+    # Keep the browser workflow in one place so session-state updates stay predictable across reruns.
     # Execute the end-to-end pipeline and persist the resulting artifacts.
     orchestrator = get_orchestrator()
     run_label = uploaded_file.name if uploaded_file is not None else (text_input[:32] or "text")
@@ -1252,6 +1344,42 @@ def run_pipeline(
     if progress_callback is not None:
         progress_callback("save", f"Saved current generated Manim code to {current_code_path.name}.")
 
+    compile_repair_payload = {
+        "used": False,
+        "repaired_code": "",
+        "info": {},
+    }
+    compile_error = get_python_compile_error(current_code_path)
+    if compile_error is not None:
+        if progress_callback is not None:
+            progress_callback(
+                "syntax_repair",
+                "Compile validation failed for the generated Manim code. Attempting automatic repair...",
+            )
+        repaired_code, compile_repair_info = attempt_manim_code_compile_repair(
+            current_code,
+            result,
+            compile_error,
+        )
+        if repaired_code:
+            current_code = sanitize_generated_manim_code(repaired_code)
+            result.setdefault("manim_code", {})["text"] = current_code
+            current_code_path.write_text(current_code + "\n", encoding="utf-8")
+            compile_repair_payload = {
+                "used": True,
+                "repaired_code": current_code,
+                "info": compile_repair_info,
+            }
+            compile_error = get_python_compile_error(current_code_path)
+        if compile_error is not None:
+            raise RuntimeError(
+                "Generated Manim code did not compile.\n"
+                + compile_error
+            )
+        if progress_callback is not None:
+            progress_callback("syntax_repair", "Automatic compile repair completed successfully.")
+    result.setdefault("manim_code", {})["_compile_repair"] = compile_repair_payload
+
     render_result = None
     if render_video:
         if not current_code:
@@ -1270,10 +1398,12 @@ def run_pipeline(
             current_code = sanitize_generated_manim_code(repaired_code)
             result.setdefault("manim_code", {})["text"] = current_code
             current_code_path.write_text(current_code + "\n", encoding="utf-8")
-        result.setdefault("manim_code", {})["_compile_repair"] = {
-            "used": bool(render_result.get("compile_repair_used")),
-            "repaired_code": repaired_code,
-        }
+        if render_result.get("compile_repair_used"):
+            result.setdefault("manim_code", {})["_compile_repair"] = {
+                "used": True,
+                "repaired_code": repaired_code,
+                "info": render_result.get("compile_repair_info") or {},
+            }
         if progress_callback is not None:
             kind = render_result.get("output_kind", "video")
             progress_callback("render", f"Manim render complete. Produced {kind}.")
@@ -1903,6 +2033,7 @@ def main() -> None:
                             output["pipeline_result"].setdefault("manim_code", {})["_compile_repair"] = {
                                 "used": bool(new_render_result.get("compile_repair_used")),
                                 "repaired_code": repaired_code,
+                                "info": new_render_result.get("compile_repair_info") or {},
                             }
                             output["render_result"] = new_render_result
                             persist_bundle(output)
@@ -1939,6 +2070,12 @@ def main() -> None:
 
             if compile_repair.get("used"):
                 st.success("A compile-time repair pass was also used before render.")
+                repair_info = compile_repair.get("info") or {}
+                repair_mode = str(repair_info.get("mode") or "").strip()
+                if repair_mode:
+                    st.caption(f"Compile-time repair mode: `{repair_mode}`")
+                if repair_info:
+                    st.json(repair_info)
                 repaired_text = str(compile_repair.get("repaired_code") or "").strip()
                 if repaired_text:
                     with st.expander("Compile-time repaired script", expanded=False):

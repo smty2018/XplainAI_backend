@@ -57,6 +57,7 @@ LAYOUT AND OVERLAP PREVENTION
 - Keep the frame visually occupied in a deliberate way: either one major region carries the scene strongly, or at least two purposeful regions remain active.
 - Size boxes from content density. If a scene needs a 3-line or 4-line derivation stack, the planner should reserve a tall derivation band instead of assuming the code generator can shrink the text safely.
 - Multi-line summary cards or answer panels should get enough height for readable text, padding, and highlight rectangles.
+- Do not plan a single giant comparison table when the content is prose-heavy. If there are more than about 3 columns of text, long assumptions/trade-offs, or many rows, split the comparison across multiple scenes, smaller subtables, or method cards.
 
 TECHNICAL REQUIREMENTS
 - Target Manim Community Edition.

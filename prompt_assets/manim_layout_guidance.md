@@ -60,6 +60,12 @@ Budget width and height for graphs, braces, formulas, labels, and final answer b
 - Final answer scenes should use a result panel, summary strip, or paired callout with context like units, exact form, interpretation, or a compact recap. Do not end on a tiny centered `MathTex` line by itself unless it is a very brief transition.
 - When a derivation resolves to a single value, promote that value into a larger answer card or keep a compact supporting stack visible until the answer panel is fully established.
 
+8e. Wide prose tables are usually the wrong visual choice.
+- Do not place a comparison table with 4 or more text-heavy columns on a single 16:9 frame.
+- If the cell content contains sentences, assumptions, or trade-off paragraphs, split it into multiple scenes, smaller subtables, or per-method cards.
+- Use tables only when each cell is genuinely compact, such as a short label, symbol, or number.
+- For comparison-heavy lessons, prefer one dimension per scene, one method per scene, or a 2-column/3-column card layout instead of a giant master table.
+
 9. Formula scenes need stricter rules than generic scenes.
 - Never keep two dense equations in the same box at the same time.
 - Never rely on `.shift()` after `place_in_box(...)` to create a stacked formula layout.

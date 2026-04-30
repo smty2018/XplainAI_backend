@@ -1,4 +1,8 @@
-"""Chroma-backed retrieval helpers for Manim planning and code generation."""
+"""Chroma-backed retrieval helpers for Manim planning and code generation.
+
+The RAG layer stays local-first: it indexes curated prompt assets plus scraped
+Manim docs/examples so planning and codegen can reuse known-good patterns.
+"""
 
 from __future__ import annotations
 
@@ -94,6 +98,9 @@ class ManimKnowledgeBase:
         self._collection = None
         self._last_sync_stats: Dict[str, Any] = {}
         self.disabled_reason: Optional[str] = None
+        self.persistence_mode = "persistent"
+        self._manifest_enabled = True
+        self._runtime_note: Optional[str] = None
 
         if self.enabled and chromadb is not None:
             self._setup()
@@ -109,13 +116,32 @@ class ManimKnowledgeBase:
 
 
     def _setup(self) -> None:
-        self.persist_dir.mkdir(parents=True, exist_ok=True)
+        # Startup is eager so the app can report RAG health as soon as the page loads.
         settings = Settings(anonymized_telemetry=False, allow_reset=False) if Settings else None
-        self._client = chromadb.PersistentClient(path=str(self.persist_dir), settings=settings)
-        self._collection = self._client.get_or_create_collection(
-            name=self.collection_name,
-            metadata={"hnsw:space": "cosine"},
-        )
+        try:
+            self.persist_dir.mkdir(parents=True, exist_ok=True)
+            self._client = chromadb.PersistentClient(path=str(self.persist_dir), settings=settings)
+            self._collection = self._client.get_or_create_collection(
+                name=self.collection_name,
+                metadata={"hnsw:space": "cosine"},
+            )
+            self.persistence_mode = "persistent"
+            self._manifest_enabled = True
+            self._runtime_note = None
+        except Exception as exc:
+            # Keep the app alive when the persisted DB is locked or unavailable.
+            # The fallback index is rebuilt from local sources for the current process.
+            self._client = chromadb.EphemeralClient(settings=settings)
+            self._collection = self._client.get_or_create_collection(
+                name=self.collection_name,
+                metadata={"hnsw:space": "cosine"},
+            )
+            self.persistence_mode = "ephemeral"
+            self._manifest_enabled = False
+            self._runtime_note = (
+                "Persistent Chroma storage was unavailable, so the knowledge base "
+                f"is running in memory for this process only: {exc}"
+            )
         self.sync_index()
 
     def sync_index(self) -> Dict[str, Any]:
@@ -129,13 +155,14 @@ class ManimKnowledgeBase:
                 "chunk_count": 0,
                 "sources": [],
                 "version": self.VERSION,
+                "mode": self.persistence_mode,
             }
             return dict(self._last_sync_stats)
 
         start = perf_counter()
         chunks = self._load_chunks()
         current_ids = [chunk.chunk_id for chunk in chunks]
-        previous_ids = set(self._load_manifest_ids())
+        previous_ids = set(self._load_manifest_ids()) if self._manifest_enabled else set()
         stale_ids = sorted(previous_ids - set(current_ids))
         if stale_ids:
             self._collection.delete(ids=stale_ids)
@@ -151,7 +178,18 @@ class ManimKnowledgeBase:
                 embeddings=embeddings,
             )
 
-        self._write_manifest_ids(current_ids)
+        manifest_warning = None
+        if self._manifest_enabled:
+            try:
+                self._write_manifest_ids(current_ids)
+            except OSError as exc:
+                self._manifest_enabled = False
+                self.persistence_mode = "ephemeral"
+                manifest_warning = (
+                    "Manifest write failed, so the knowledge base switched to in-memory "
+                    f"runtime mode for this process: {exc}"
+                )
+                self._runtime_note = manifest_warning
         source_names = sorted({chunk.metadata.get("source_name", "") for chunk in chunks if chunk.metadata.get("source_name")})
         self._last_sync_stats = {
             "enabled": True,
@@ -161,10 +199,16 @@ class ManimKnowledgeBase:
             "sources": source_names,
             "version": self.VERSION,
             "sync_seconds": round(perf_counter() - start, 3),
+            "mode": self.persistence_mode,
         }
+        if self._runtime_note:
+            self._last_sync_stats["note"] = self._runtime_note
+        if manifest_warning:
+            self._last_sync_stats["manifest_warning"] = manifest_warning
         return dict(self._last_sync_stats)
 
     def get_status(self) -> Dict[str, Any]:
+        """Return the last sync snapshot, refreshing it lazily when needed."""
         if not self._last_sync_stats:
             return self.sync_index()
         return dict(self._last_sync_stats)
@@ -281,6 +325,7 @@ class ManimKnowledgeBase:
         return "\n".join(lines)
 
     def _load_chunks(self) -> List[KnowledgeChunk]:
+        # Pull from both the KB seed folder and prompt assets because both are trusted retrieval sources.
         chunks: List[KnowledgeChunk] = []
         for path in self._source_paths():
             try:
@@ -316,6 +361,7 @@ class ManimKnowledgeBase:
         return candidates
 
     def _chunk_text(self, text: str, *, suffix: str) -> List[str]:
+        # Keep chunks large enough to preserve examples, but small enough to fit comfortably into prompts.
         cleaned = str(text or "").strip()
         if not cleaned:
             return []

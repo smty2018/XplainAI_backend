@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#Main script to run the local parser
+"""CLI entry point for local parsing, reasoning, and optional Manim prompt generation."""
 
 import argparse
 import json
@@ -14,6 +14,7 @@ from src.reasoner import SolutionOrchestrator
 
 
 def main():
+    """Parse CLI arguments, run the requested pipeline stages, and print readable output."""
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     if hasattr(sys.stderr, "reconfigure"):
@@ -70,6 +71,7 @@ def main():
 
     args = parser.parse_args()
 
+    # Later flags depend on earlier pipeline stages, so we turn on the required upstream work here.
     if args.animation_prompt:
         args.scene_planner = True
 
@@ -89,6 +91,7 @@ def main():
     parser_obj = None
     orchestrator = None
     if args.reason:
+        # The orchestrator owns the full parse -> solve -> verify pipeline.
         orchestrator = SolutionOrchestrator(args.config)
         parser_obj = orchestrator.parser
     else:
@@ -107,6 +110,7 @@ def main():
             generate_manim_code=args.manim_code,
         )
     elif args.type == "auto":
+        # Auto mode still routes image and PDF inputs to the richer parsing paths when needed.
         input_path = Path(args.input)
         if args.prompt and input_path.exists():
             suffix = input_path.suffix.lower()
@@ -130,6 +134,7 @@ def main():
         result = parser_obj.parse_image(Image.open(args.input), prompt_text=args.prompt)
 
     if args.reason:
+        # Group the CLI output by stage so it mirrors the browser app and is easier to debug.
         print("\n" + "=" * 50)
         print("PARSED INPUT:")
         print("=" * 50)

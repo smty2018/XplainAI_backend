@@ -1,4 +1,8 @@
-"""Replicate-hosted parser using deepseek-ai/deepseek-vl2."""
+"""Replicate-hosted parser using deepseek-ai/deepseek-vl2.
+
+This adapter keeps the same normalized parser contract as the local parser,
+but sends the heavy vision call to Replicate instead of a local model.
+"""
 
 from __future__ import annotations
 
@@ -59,6 +63,7 @@ class ReplicateDeepSeekVL2Parser(LocalParser):
         self.max_inline_image_bytes = int(self.config.get("replicate_max_inline_image_bytes", 900000))
         self.max_image_side = int(self.config.get("replicate_max_image_side", 1400))
         self.api_token = self._resolve_api_token(api_token)
+        # Add a few signal-processing cues because remote OCR often sees this notation in course notes.
         self.domain_terms["mathematics"] = self._merge_unique_strings(
             self.domain_terms.get("mathematics", []),
             [
@@ -110,6 +115,7 @@ class ReplicateDeepSeekVL2Parser(LocalParser):
         return Image.LANCZOS
 
     def _load_font(self, size: int) -> ImageFont.ImageFont:
+        """Pick a readable local font when a text prompt must be rendered as an image."""
         candidates = [
             Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts" / "arial.ttf",
             Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts" / "segoeui.ttf",
@@ -134,6 +140,7 @@ class ReplicateDeepSeekVL2Parser(LocalParser):
         return image.resize(new_size, self._resample_filter())
 
     def _text_to_image(self, text: str) -> Image.Image:
+        """Render plain text into an image so the vision model can read text-only requests."""
         content = self._coerce_string(text)
         font = self._load_font(28)
         margin = 40

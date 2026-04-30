@@ -1,88 +1,218 @@
-# XplainAI_backend
+# XplainAI
 
-## API
+XplainAI turns text, images, and PDFs into educational animated explanations.
+It parses the input, reasons through the solution, retrieves relevant Manim guidance through RAG, creates a scene plan, generates Manim code, and can render a narrated video locally. The generated Manim code can also be edited in place, so you can rerender only the changed animation code instead of regenerating the whole pipeline every time.
 
-This repo now includes a hosted-friendly FastAPI wrapper around the Replicate parser in [api.py](/Users/Sheetali/Documents/xplainai/api.py).
+## What XplainAI does
 
-### Run locally
+- accepts plain text, screenshots, and PDFs as input
+- extracts the important mathematical or technical content
+- generates a solution and verification trace
+- uses a local Chroma-based RAG layer for Manim examples, docs, and layout guidance
+- produces a scene planner and executable Manim code
+- optionally renders the final animation locally with narration
+- lets you edit the generated code directly and rerender from that edited code
 
-```bash
-pip install -r requirements.txt
-uvicorn api:app --host 0.0.0.0 --port 8000
+## Main parts of the repo
+
+- [C:\Users\Sheetali\Documents\xplainai\streamlit_app.py](C:/Users/Sheetali/Documents/xplainai/streamlit_app.py)
+  Streamlit frontend for the full workflow.
+- [C:\Users\Sheetali\Documents\xplainai\api.py](C:/Users/Sheetali/Documents/xplainai/api.py)
+  FastAPI wrapper for the parser endpoints.
+- [C:\Users\Sheetali\Documents\xplainai\src](C:/Users/Sheetali/Documents/xplainai/src)
+  Core pipeline logic: parser, reasoner, verification, RAG, and compile repair.
+- [C:\Users\Sheetali\Documents\xplainai\prompt_assets](C:/Users/Sheetali/Documents/xplainai/prompt_assets)
+  Prompt templates and layout guidance used by the pipeline.
+- [C:\Users\Sheetali\Documents\xplainai\data\manim_kb](C:/Users/Sheetali/Documents/xplainai/data/manim_kb)
+  Local Manim knowledge base seed files used by RAG.
+
+## Recommended environment
+
+The current full render pipeline is most stable on Windows with Python 3.10.
+
+Before installing, make sure you have:
+
+- Python `3.10`
+- Git
+- a Replicate API token (for the Replicate-hosted DeepSeek-VL2 parser)
+- a DeepSeek API key (for reasoning, scene planning, Manim code generation, and repair)
+- MiKTeX installed if you want LaTeX-heavy Manim scenes to render reliably
+
+## Step-by-step installation
+
+### 1. Clone the repository
+
+```powershell
+git clone <your-repo-url>
+cd xplainai
 ```
 
-Then open:
+### 2. Create a virtual environment
 
-- `http://localhost:8000/docs` for the interactive Swagger UI
-- `http://localhost:8000/health` for a health check
+```powershell
+py -3.10 -m venv venv
+```
 
-### Endpoints
+### 3. Activate the virtual environment
+
+```powershell
+.\venv\Scripts\Activate.ps1
+```
+
+If PowerShell blocks activation on your machine, you can still run everything with the venv Python directly:
+
+```powershell
+.\venv\Scripts\python.exe --version
+```
+
+### 4. Upgrade pip
+
+```powershell
+.\venv\Scripts\python.exe -m pip install --upgrade pip
+```
+
+### 5. Install Python dependencies
+
+```powershell
+.\venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+### 6. Create a `.env` file
+
+Create [C:\Users\Sheetali\Documents\xplainai\.env](C:/Users/Sheetali/Documents/xplainai/.env) with at least:
+
+```env
+REPLICATE_API_TOKEN=your_replicate_token_here
+DEEPSEEK_API_KEY=your_deepseek_key_here
+```
+
+The parser also accepts these alternate Replicate variable names if needed:
+
+- `REPLICATE_TOKEN`
+- `tokenreplicate`
+- `replicate`
+
+The reasoner also checks these alternate DeepSeek variable names:
+
+- `deepseek`
+- `deepdeek`
+
+### 7. Start the Streamlit app
+
+Always prefer running Streamlit through the venv Python so the app uses the same interpreter as your installed dependencies:
+
+```powershell
+.\venv\Scripts\python.exe -m streamlit run streamlit_app.py
+```
+
+Then open the local URL shown in the terminal, usually:
+
+- [http://localhost:8501](http://localhost:8501)
+
+## First run expectations
+
+On the first run, a few things can take extra time:
+
+- the local Chroma index may sync the Manim knowledge base
+- the first parser or reasoning call depends on external APIs
+- the first narrated render may download or warm up TTS assets
+- the first full Manim render can take noticeably longer than later runs
+
+This is normal for the initial setup.
+
+## How to use XplainAI
+
+1. Open the Streamlit app.
+2. Choose whether your input is text, image, or PDF.
+3. Upload the file or paste the text.
+4. Run the pipeline.
+5. Review:
+   - parsed JSON
+   - solution
+   - verification
+   - RAG context
+   - scene planner
+   - generated Manim code
+6. If needed, edit the generated Manim code directly in the app and rerender without regenerating the entire pipeline.
+
+## Local RAG setup
+
+XplainAI uses a local Chroma-backed knowledge base for Manim guidance.
+
+The main source folders are:
+
+- [C:\Users\Sheetali\Documents\xplainai\prompt_assets](C:/Users/Sheetali/Documents/xplainai/prompt_assets)
+- [C:\Users\Sheetali\Documents\xplainai\data\manim_kb](C:/Users/Sheetali/Documents/xplainai/data/manim_kb)
+
+The persistent Chroma directory is:
+
+- [C:\Users\Sheetali\Documents\xplainai\cache\chroma_manim_kb](C:/Users/Sheetali/Documents/xplainai/cache/chroma_manim_kb)
+
+If you add more `.md`, `.txt`, or `.py` files under the knowledge-base seed folders, the app will pick them up on the next sync.
+
+## Running the parser API only
+
+If you only want the parser service and not the full Streamlit workflow:
+
+```powershell
+.\venv\Scripts\python.exe -m uvicorn api:app --host 0.0.0.0 --port 8000
+```
+
+Useful endpoints:
+
+- [http://localhost:8000/docs](http://localhost:8000/docs)
+- [http://localhost:8000/health](http://localhost:8000/health)
+
+Available parser routes:
 
 - `POST /parse/text`
 - `POST /parse/image`
 - `POST /parse/pdf`
 
-### Required env var
+## Troubleshooting
 
-Set one of these before starting:
+### Streamlit says RAG is disabled
 
-- `REPLICATE_API_TOKEN`
-- `REPLICATE_TOKEN`
-- `tokenreplicate`
-- `replicate`
+Usually this means the app is running in the wrong Python interpreter or `chromadb` is missing from that interpreter.
 
-### Quick test
+Use:
 
-```bash
-curl -X POST "http://localhost:8000/parse/image" ^
-  -F "file=@test_1.png"
+```powershell
+.\venv\Scripts\python.exe -m streamlit run streamlit_app.py
 ```
 
-```bash
-curl -X POST "http://localhost:8000/parse/pdf" ^
-  -F "file=@t2.pdf"
-```
+not:
 
-## Hosting
-
-The easiest path is Render.
-
-### Render setup
-
-1. Push this repo to GitHub.
-2. In Render, create a new Web Service from that repo.
-3. Use:
-   - Build Command: `pip install -r requirements.txt`
-   - Start Command: `uvicorn api:app --host 0.0.0.0 --port $PORT`
-4. Add your `REPLICATE_API_TOKEN` as a secret environment variable.
-5. Deploy, then share:
-   - `https://your-service.onrender.com/docs`
-
-Your friends can test directly from the Swagger UI without writing code.
-
-## Streamlit App
-
-This repo also includes a local Streamlit frontend for the full pipeline:
-
-- upload text, images, or PDFs
-- run parsing, reasoning, Scene Planner generation, and Manim code generation
-- render the generated animation locally and play the resulting video in the browser
-
-### Run locally
-
-```bash
-pip install -r requirements.txt
+```powershell
 streamlit run streamlit_app.py
 ```
 
-Then open the local URL shown by Streamlit, usually:
+### Manim render fails on LaTeX
 
-- `http://localhost:8501`
+Install or update MiKTeX, then try again. Some generated scenes rely on LaTeX rendering for formulas and labels.
 
-### Notes
+### PowerShell blocks `Activate.ps1`
 
-- For `Replicate API` parsing, make sure your Replicate token is in `.env`.
-- For reasoning, make sure your DeepSeek API key is in `.env`.
-- Video rendering uses your local Manim installation, so the first render can take a while.
-- The verified-solution -> Scene Planner -> Manim code path now uses a local Chroma knowledge base seeded from `prompt_assets/` and `data/manim_kb/`.
-- If you add more Manim docs/examples under `data/manim_kb/`, the Chroma index will pick them up automatically on the next run.
+You can skip activation and use the venv Python directly in every command:
+
+```powershell
+.\venv\Scripts\python.exe -m streamlit run streamlit_app.py
+```
+
+### The first render is slow
+
+That is expected. The app may be warming up Manim, ffmpeg, TTS, or local caches.
+
+## Hosting notes
+
+- The FastAPI parser service can be deployed separately if needed.
+- The full Streamlit + local render workflow is heavier and is best run on a machine that can support Manim rendering.
+- For a public setup, the easiest architecture is usually:
+  - Streamlit frontend
+  - external parser / reasoning APIs
+  - local or separate render worker
+  - persistent object storage for generated videos
+
+## License
+
+See [C:\Users\Sheetali\Documents\xplainai\LICENSE](C:/Users/Sheetali/Documents/xplainai/LICENSE).

@@ -16,10 +16,13 @@ from src.parser_replicate_vl2 import ReplicateAPIError, ReplicateDeepSeekVL2Pars
 
 
 class TextParseRequest(BaseModel):
+    """Request body for the text parsing endpoint."""
+
     text: str
 
 
 def _safe_filename_suffix(filename: Optional[str], fallback: str) -> str:
+    """Return a lowercase upload suffix, or a safe fallback when none is present."""
     name = (filename or "").strip()
     if not name:
         return fallback
@@ -29,6 +32,7 @@ def _safe_filename_suffix(filename: Optional[str], fallback: str) -> str:
 
 @lru_cache(maxsize=1)
 def get_parser() -> ReplicateDeepSeekVL2Parser:
+    """Reuse one parser instance so API requests do not repeat setup work."""
     return ReplicateDeepSeekVL2Parser()
 
 
@@ -51,6 +55,7 @@ app.add_middleware(
 
 @app.get("/")
 def root() -> Dict[str, Any]:
+    """Expose a small discovery payload for humans and simple health checks."""
     return {
         "name": "XplainAI Replicate Parser API",
         "docs": "/docs",
@@ -65,11 +70,13 @@ def root() -> Dict[str, Any]:
 
 @app.get("/health")
 def health() -> Dict[str, str]:
+    """Return a cheap health response without touching the parser backend."""
     return {"status": "ok"}
 
 
 @app.post("/parse/text")
 def parse_text(payload: TextParseRequest) -> Dict[str, Any]:
+    """Parse plain text without creating any temporary files on disk."""
     text = payload.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="`text` cannot be empty.")
@@ -87,6 +94,7 @@ def parse_image(
     file: UploadFile = File(...),
     prompt: str = Form(""),
 ) -> Dict[str, Any]:
+    """Parse a single uploaded image through the Replicate-backed parser."""
     try:
         image = Image.open(file.file).convert("RGB")
     except UnidentifiedImageError as exc:
@@ -107,12 +115,14 @@ def parse_pdf(
     file: UploadFile = File(...),
     prompt: str = Form(""),
 ) -> Dict[str, Any]:
+    """Write the uploaded PDF to a temp file, parse it, then clean it up."""
     suffix = _safe_filename_suffix(file.filename, ".pdf")
     if suffix != ".pdf":
         raise HTTPException(status_code=400, detail="Please upload a PDF file.")
 
     temp_path: Optional[Path] = None
     try:
+        # The parser works with filesystem paths for PDFs, so we bridge the upload with a temp file.
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as handle:
             temp_path = Path(handle.name)
             handle.write(file.file.read())

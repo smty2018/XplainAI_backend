@@ -59,3 +59,4 @@ Strict no-overlap rules for generated Manim code:
 - If readable text would require shrinking below a comfortable size, restructure the scene instead of compressing the typography.
 - If the scene would leave most of the frame empty, restructure it so the answer is presented as a deliberate panel or recap instead of a tiny isolated line.
 - If a multi-line derivation stack or answer card is being squeezed into a short box, treat that as a layout failure even if nothing technically overlaps.
+- If a comparison table has 4 or more text-heavy columns, long sentence-style cells, or both many rows and many columns, treat that as a layout failure and split it into multiple scenes, cards, or smaller subtables.
