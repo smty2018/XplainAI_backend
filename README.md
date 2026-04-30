@@ -15,15 +15,15 @@ It parses the input, reasons through the solution, retrieves relevant Manim guid
 
 ## Main parts of the repo
 
-- [C:\Users\Sheetali\Documents\xplainai\streamlit_app.py](C:/Users/Sheetali/Documents/xplainai/streamlit_app.py)
+- `streamlit_app.py`
   Streamlit frontend for the full workflow.
-- [C:\Users\Sheetali\Documents\xplainai\api.py](C:/Users/Sheetali/Documents/xplainai/api.py)
+- `api.py`
   FastAPI wrapper for the parser endpoints.
-- [C:\Users\Sheetali\Documents\xplainai\src](C:/Users/Sheetali/Documents/xplainai/src)
+- `src/`
   Core pipeline logic: parser, reasoner, verification, RAG, and compile repair.
-- [C:\Users\Sheetali\Documents\xplainai\prompt_assets](C:/Users/Sheetali/Documents/xplainai/prompt_assets)
+- `prompt_assets/`
   Prompt templates and layout guidance used by the pipeline.
-- [C:\Users\Sheetali\Documents\xplainai\data\manim_kb](C:/Users/Sheetali/Documents/xplainai/data/manim_kb)
+- `data/manim_kb/`
   Local Manim knowledge base seed files used by RAG.
 
 ## Recommended environment
@@ -79,7 +79,7 @@ If PowerShell blocks activation on your machine, you can still run everything wi
 
 ### 6. Create a `.env` file
 
-Create [C:\Users\Sheetali\Documents\xplainai\.env](C:/Users/Sheetali/Documents/xplainai/.env) with at least:
+Create a `.env` file in the project root with at least:
 
 ```env
 REPLICATE_API_TOKEN=your_replicate_token_here
@@ -139,16 +139,14 @@ This is normal for the initial setup.
 
 XplainAI uses a local Chroma-backed knowledge base for Manim guidance.
 
-The main source folders are:
+It indexes the project’s prompt assets and Manim knowledge-base seed files to retrieve:
 
-- [C:\Users\Sheetali\Documents\xplainai\prompt_assets](C:/Users/Sheetali/Documents/xplainai/prompt_assets)
-- [C:\Users\Sheetali\Documents\xplainai\data\manim_kb](C:/Users/Sheetali/Documents/xplainai/data/manim_kb)
+- Manim examples
+- layout guidance
+- scene-planning patterns
+- safe code-generation references
 
-The persistent Chroma directory is:
-
-- [C:\Users\Sheetali\Documents\xplainai\cache\chroma_manim_kb](C:/Users/Sheetali/Documents/xplainai/cache/chroma_manim_kb)
-
-If you add more `.md`, `.txt`, or `.py` files under the knowledge-base seed folders, the app will pick them up on the next sync.
+If you add more `.md`, `.txt`, or `.py` knowledge-base seed files, the app will pick them up on the next sync.
 
 ## Running the parser API only
 
@@ -203,16 +201,6 @@ You can skip activation and use the venv Python directly in every command:
 
 That is expected. The app may be warming up Manim, ffmpeg, TTS, or local caches.
 
-## Hosting notes
-
-- The FastAPI parser service can be deployed separately if needed.
-- The full Streamlit + local render workflow is heavier and is best run on a machine that can support Manim rendering.
-- For a public setup, the easiest architecture is usually:
-  - Streamlit frontend
-  - external parser / reasoning APIs
-  - local or separate render worker
-  - persistent object storage for generated videos
-
 ## License
 
-See [C:\Users\Sheetali\Documents\xplainai\LICENSE](C:/Users/Sheetali/Documents/xplainai/LICENSE).
+See `LICENSE`.
