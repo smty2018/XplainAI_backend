@@ -26,6 +26,9 @@ It parses the input, reasons through the solution, retrieves relevant Manim guid
 - `data/manim_kb/`
   Local Manim knowledge base seed files used by RAG.
 
+<img width="1672" height="941" alt="image" src="https://github.com/user-attachments/assets/df6ea86c-a698-4f23-96bd-fcf122e3c2f8" />
+
+
 ## Recommended environment
 
 The current full render pipeline is most stable on Windows with Python 3.10.
