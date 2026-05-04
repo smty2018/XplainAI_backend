@@ -26,7 +26,7 @@ It parses the input, reasons through the solution, retrieves relevant Manim guid
 - `data/manim_kb/`
   Local Manim knowledge base seed files used by RAG.
 
-<img width="1672" height="941" alt="image" src="https://github.com/user-attachments/assets/df6ea86c-a698-4f23-96bd-fcf122e3c2f8" />
+<img width="1672" height="941" alt="image" src="https://github.com/user-attachments/assets/d160b0fe-b398-4568-9bd3-75f1e7047128" />
 
 
 ## Recommended environment
